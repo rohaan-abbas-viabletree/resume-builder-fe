@@ -70,31 +70,41 @@ const dateRangeLabel = (start?: any, end?: any): string => {
   return s || e || "";
 };
 
-// API -> RangePicker value
+// ---- Config: set true if Strapi has start_date/end_date fields ----
+const BACKEND_HAS_DATE_RANGE = true; // set to false if your backend only has "date"
+
+// Build a pair from either (start/end) or from a single 'date'
+const toPair = (start?: any, end?: any, single?: any) => {
+  const s = start ?? single;
+  return {
+    start: s ? dayjs(s) : undefined,
+    end: end ? dayjs(end) : undefined,
+  };
+};
+
+// API -> RangePicker value from either {start_date,end_date} or {date}
 const toRangeValue = (
   start?: any,
   end?: any,
+  single?: any,
 ): [any | undefined, any | undefined] | undefined => {
-  const s = start ? dayjs(start) : undefined;
-  const e = end ? dayjs(end) : undefined;
+  const { start: s, end: e } = toPair(start, end, single);
   const sv = s && s.isValid() ? s : undefined;
   const ev = e && e.isValid() ? e : undefined;
   if (!sv && !ev) return undefined;
   return [sv, ev];
 };
 
-// RangePicker -> { start_date, end_date }
+// RangePicker -> { start_date, end_date } strings
 const serializeRangeToPair = (
   v: any,
 ): { start_date?: string; end_date?: string } => {
   if (!v) return {};
-  // antd RangePicker returns [dayjs|undefined, dayjs|undefined]
   if (Array.isArray(v)) {
     const start_date = fmtDate(v[0]) || undefined;
     const end_date = fmtDate(v[1]) || undefined;
     return { start_date, end_date };
   }
-  // if someone passes single dayjs/date/string by mistake
   const d = fmtDate(v);
   return d ? { start_date: d, end_date: undefined } : {};
 };
@@ -112,11 +122,28 @@ type UiResume = {
     id?: string;
     education_name?: string;
     education_info?: string;
-    // form-only field:
-    date?: [any | undefined, any | undefined];
-    // fetched/saved:
+
+    // ✅ UI RangePicker only
+    date?: [any, any] | undefined;
+
+    // ✅ API values
     start_date?: string | null;
     end_date?: string | null;
+  }>;
+
+  work_history?: Array<{
+    id?: string;
+    designation?: string;
+    location?: string;
+    description?: string;
+
+    // ✅ UI RangePicker only
+    date?: [any, any] | undefined;
+
+    // ✅ API values
+    start_date?: string | null;
+    end_date?: string | null;
+    list?: Array<{ description?: string }>;
   }>;
 
   languages?: Array<{
@@ -135,19 +162,6 @@ type UiResume = {
   skills?: Array<{
     skill_level?: string;
     skill_name?: string;
-  }>;
-
-  work_history?: Array<{
-    // form-only:
-    date?: [any | undefined, any | undefined];
-    // fetched/saved:
-    start_date?: string | null;
-    end_date?: string | null;
-
-    designation?: string;
-    location?: string;
-    description?: string;
-    list?: Array<{ description?: string }>;
   }>;
 };
 
@@ -409,11 +423,11 @@ export default function AddEditResume() {
       ...ui,
       education: ui.education?.map((e) => ({
         ...e,
-        date: toRangeValue(e?.start_date, e?.end_date),
+        date: toRangeValue(e?.start_date, e?.end_date, e?.date), // <-- accept legacy single date
       })),
       work_history: ui.work_history?.map((w) => ({
         ...w,
-        date: toRangeValue(w?.start_date, w?.end_date),
+        date: toRangeValue(w?.start_date, w?.end_date, w?.date), // <-- accept legacy single date
       })),
     };
 
@@ -440,6 +454,18 @@ export default function AddEditResume() {
   // Debounced live preview
   const onFormValuesChange = (_: any, all: any) => {
     const next = normalizeNullsDeep(all) as UiResume;
+
+    // derive start/end for preview so PDF shows instantly
+    next.education = next.education?.map((e) => {
+      const { start_date, end_date } = serializeRangeToPair(e?.date);
+      return { ...e, start_date, end_date };
+    });
+
+    next.work_history = next.work_history?.map((w) => {
+      const { start_date, end_date } = serializeRangeToPair(w?.date);
+      return { ...w, start_date, end_date };
+    });
+
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -450,29 +476,54 @@ export default function AddEditResume() {
   const handleSave = async () => {
     const values = form.getFieldsValue();
 
+    // Build normalized arrays first so we can branch payloads cleanly
+    const eduNormalized = values.education?.map((e: any) => {
+      const { start_date, end_date } = serializeRangeToPair(e?.date);
+      return {
+        id: e?.id,
+        education_name: e?.education_name,
+        education_info: e?.education_info,
+        start_date,
+        end_date,
+        date: start_date || null, // for legacy single-date backends
+      };
+    });
+
+    const workNormalized = values.work_history?.map((w: any) => {
+      const { start_date, end_date } = serializeRangeToPair(w?.date);
+      return {
+        id: w?.id,
+        start_date,
+        end_date,
+        date: start_date || null, // for legacy single-date backends
+        designation: w?.designation,
+        location: w?.location,
+        description: w?.description,
+        list: w?.list?.map((li: any) => ({ description: li?.description })),
+      };
+    });
+
+    // Choose payload depending on backend
+    const educationPayload = BACKEND_HAS_DATE_RANGE
+      ? eduNormalized?.map(({ date, ...rest }: any) => rest) // drop 'date'
+      : eduNormalized?.map(({ start_date, end_date, ...rest }: any) => rest); // drop pair, keep 'date'
+
+    const workPayload = BACKEND_HAS_DATE_RANGE
+      ? workNormalized?.map(({ date, ...rest }: any) => rest)
+      : workNormalized?.map(({ start_date, end_date, ...rest }: any) => rest);
+
     const payload = normalizeNullsDeep({
       resume_ref_id: values.resume_ref_id,
       name: values.name,
       designation: values.designation,
       introduction: values.introduction,
 
-      // skills as-is
       skills: values.skills?.map((s: any) => ({
         skill_name: s?.skill_name,
         skill_level: s?.skill_level,
       })),
 
-      // education: convert date range -> start_date/end_date
-      education: values.education?.map((e: any) => {
-        const { start_date, end_date } = serializeRangeToPair(e?.date);
-        return {
-          id: e?.id,
-          education_name: e?.education_name,
-          education_info: e?.education_info,
-          start_date,
-          end_date,
-        };
-      }),
+      education: educationPayload,
 
       languages: values.languages?.map((l: any) => ({
         name: l?.name,
@@ -489,22 +540,7 @@ export default function AddEditResume() {
         })),
       })),
 
-      // work_history: convert date range -> start_date/end_date
-
-      work_history: values.work_history?.map((w: any) => {
-        const { start_date, end_date } = serializeRangeToPair(w?.date);
-        return {
-          id: w?.id,
-          start_date,
-          end_date,
-          designation: w?.designation,
-          location: w?.location,
-          description: w?.description,
-          list: w?.list?.map((li: any) => ({
-            description: li?.description,
-          })),
-        };
-      }),
+      work_history: workPayload,
     });
 
     if (resumeId) {

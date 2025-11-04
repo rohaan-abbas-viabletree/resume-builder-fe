@@ -18,7 +18,7 @@ export type GetResumeByIdQueryVariables = Types.Exact<{
 }>;
 
 
-export type GetResumeByIdQuery = { __typename?: 'Query', resume?: { __typename?: 'Resume', documentId: string, name?: string | null, createdAt?: any | null, updatedAt?: any | null, resume_ref_id?: string | null, designation?: string | null, introduction?: string | null, publishedAt?: any | null, education?: Array<{ __typename?: 'ComponentSharedEducation', date?: any | null, education_info?: any | null, education_name?: string | null, id: string } | null> | null, languages?: Array<{ __typename?: 'ComponentSharedLanguages', level?: number | null, level_name?: string | null, name?: string | null } | null> | null, major_projects?: Array<{ __typename?: 'ComponentSharedMajorProjects', name?: string | null, description?: string | null, project_list?: Array<{ __typename?: 'ComponentSharedProjectList', description?: string | null } | null> | null } | null> | null, skills?: Array<{ __typename?: 'ComponentSharedSkills', skill_level?: number | null, skill_name?: string | null } | null> | null, work_history?: Array<{ __typename?: 'ComponentSharedWorkHistory', date?: any | null, designation?: string | null, location?: string | null, description?: string | null, list?: Array<{ __typename?: 'ComponentSharedList', description?: string | null } | null> | null } | null> | null } | null };
+export type GetResumeByIdQuery = { __typename?: 'Query', resume?: { __typename?: 'Resume', documentId: string, name?: string | null, createdAt?: any | null, updatedAt?: any | null, resume_ref_id?: string | null, designation?: string | null, introduction?: string | null, publishedAt?: any | null, education?: Array<{ __typename?: 'ComponentSharedEducation', start_date?: any | null, end_date?: any | null, education_info?: string | null, education_name?: string | null, id: string } | null> | null, languages?: Array<{ __typename?: 'ComponentSharedLanguages', level?: number | null, level_name?: string | null, name?: string | null } | null> | null, major_projects?: Array<{ __typename?: 'ComponentSharedMajorProjects', name?: string | null, description?: string | null, project_list?: Array<{ __typename?: 'ComponentSharedProjectList', description?: string | null } | null> | null } | null> | null, skills?: Array<{ __typename?: 'ComponentSharedSkills', skill_level?: number | null, skill_name?: string | null } | null> | null, work_history?: Array<{ __typename?: 'ComponentSharedWorkHistory', start_date?: any | null, end_date?: any | null, designation?: string | null, location?: string | null, description?: string | null, list?: Array<{ __typename?: 'ComponentSharedList', description?: string | null } | null> | null } | null> | null } | null };
 
 
 
@@ -89,7 +89,8 @@ export const GetResumeByIdDocument = `
     designation
     designation
     education {
-      date
+      start_date
+      end_date
       education_info
       education_name
       id
@@ -113,7 +114,8 @@ export const GetResumeByIdDocument = `
       skill_name
     }
     work_history {
-      date
+      start_date
+      end_date
       designation
       location
       description

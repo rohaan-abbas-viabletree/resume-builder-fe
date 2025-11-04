@@ -227,26 +227,29 @@ export type CategoryInput = {
 
 export type ComponentSharedEducation = {
   __typename?: 'ComponentSharedEducation';
-  date?: Maybe<Scalars['Date']['output']>;
-  education_info?: Maybe<Scalars['JSON']['output']>;
+  education_info?: Maybe<Scalars['String']['output']>;
   education_name?: Maybe<Scalars['String']['output']>;
+  end_date?: Maybe<Scalars['Date']['output']>;
   id: Scalars['ID']['output'];
+  start_date?: Maybe<Scalars['Date']['output']>;
 };
 
 export type ComponentSharedEducationFiltersInput = {
   and?: InputMaybe<Array<InputMaybe<ComponentSharedEducationFiltersInput>>>;
-  date?: InputMaybe<DateFilterInput>;
-  education_info?: InputMaybe<JsonFilterInput>;
+  education_info?: InputMaybe<StringFilterInput>;
   education_name?: InputMaybe<StringFilterInput>;
+  end_date?: InputMaybe<DateFilterInput>;
   not?: InputMaybe<ComponentSharedEducationFiltersInput>;
   or?: InputMaybe<Array<InputMaybe<ComponentSharedEducationFiltersInput>>>;
+  start_date?: InputMaybe<DateFilterInput>;
 };
 
 export type ComponentSharedEducationInput = {
-  date?: InputMaybe<Scalars['Date']['input']>;
-  education_info?: InputMaybe<Scalars['JSON']['input']>;
+  education_info?: InputMaybe<Scalars['String']['input']>;
   education_name?: InputMaybe<Scalars['String']['input']>;
+  end_date?: InputMaybe<Scalars['Date']['input']>;
   id?: InputMaybe<Scalars['ID']['input']>;
+  start_date?: InputMaybe<Scalars['Date']['input']>;
 };
 
 export type ComponentSharedLanguages = {
@@ -418,12 +421,13 @@ export type ComponentSharedSliderFiles_ConnectionArgs = {
 
 export type ComponentSharedWorkHistory = {
   __typename?: 'ComponentSharedWorkHistory';
-  date?: Maybe<Scalars['Date']['output']>;
   description?: Maybe<Scalars['String']['output']>;
   designation?: Maybe<Scalars['String']['output']>;
+  end_date?: Maybe<Scalars['Date']['output']>;
   id: Scalars['ID']['output'];
   list?: Maybe<Array<Maybe<ComponentSharedList>>>;
   location?: Maybe<Scalars['String']['output']>;
+  start_date?: Maybe<Scalars['Date']['output']>;
 };
 
 
@@ -435,22 +439,24 @@ export type ComponentSharedWorkHistoryListArgs = {
 
 export type ComponentSharedWorkHistoryFiltersInput = {
   and?: InputMaybe<Array<InputMaybe<ComponentSharedWorkHistoryFiltersInput>>>;
-  date?: InputMaybe<DateFilterInput>;
   description?: InputMaybe<StringFilterInput>;
   designation?: InputMaybe<StringFilterInput>;
+  end_date?: InputMaybe<DateFilterInput>;
   list?: InputMaybe<ComponentSharedListFiltersInput>;
   location?: InputMaybe<StringFilterInput>;
   not?: InputMaybe<ComponentSharedWorkHistoryFiltersInput>;
   or?: InputMaybe<Array<InputMaybe<ComponentSharedWorkHistoryFiltersInput>>>;
+  start_date?: InputMaybe<DateFilterInput>;
 };
 
 export type ComponentSharedWorkHistoryInput = {
-  date?: InputMaybe<Scalars['Date']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   designation?: InputMaybe<Scalars['String']['input']>;
+  end_date?: InputMaybe<Scalars['Date']['input']>;
   id?: InputMaybe<Scalars['ID']['input']>;
   list?: InputMaybe<Array<InputMaybe<ComponentSharedListInput>>>;
   location?: InputMaybe<Scalars['String']['input']>;
+  start_date?: InputMaybe<Scalars['Date']['input']>;
 };
 
 export type DateFilterInput = {
