@@ -1,0 +1,10 @@
+mutation createResume($data: ResumeInput!) {
+  createResume(data: $data) {
+    documentId
+  }
+}
+mutation updateResume($documentId: ID!, $data: ResumeInput!) {
+  updateResume(documentId: $documentId, data: $data) {
+    documentId
+  }
+}

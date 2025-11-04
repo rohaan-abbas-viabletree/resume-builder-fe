@@ -1,0 +1,66 @@
+# src/graphql/resume/resume_connection.gql
+query GetResumesConnection(
+  $filters: ResumeFiltersInput
+  $pagination: PaginationArg
+  $sort: [String]
+) {
+  resumes_connection(filters: $filters, pagination: $pagination, sort: $sort) {
+    nodes {
+      documentId
+      name
+      createdAt
+      updatedAt
+    }
+    pageInfo {
+      page
+      pageSize
+      pageCount
+      total
+    }
+  }
+}
+
+query GetResumeById($documentId: ID!) {
+  resume(documentId: $documentId) {
+    documentId
+    name
+    createdAt
+    updatedAt
+    resume_ref_id
+    designation
+    designation
+    education {
+      date
+      education_info
+      education_name
+      id
+    }
+    introduction
+    languages {
+      level
+      level_name
+      name
+    }
+    major_projects {
+      name
+      description
+      project_list {
+        description
+      }
+    }
+    publishedAt
+    skills {
+      skill_level
+      skill_name
+    }
+    work_history {
+      date
+      designation
+      location
+      description
+      list {
+        description
+      }
+    }
+  }
+}
