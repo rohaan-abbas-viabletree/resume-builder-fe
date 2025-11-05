@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Form, Row, Col, Divider, Switch } from "antd";
+import { Form, Row, Col, Divider, Switch, Modal } from "antd";
 import { useRouter, useParams } from "next/navigation";
 import dayjs, { Dayjs } from "dayjs";
 import FormInput from "@/components/FormInput/FormInput";
@@ -195,7 +195,6 @@ const yearRange = (start?: any, end?: any, isCurrent?: boolean): string => {
 };
 
 /* -------------------------- PDF Component -------------------------- */
-/* -------------------------- PDF Styles -------------------------- */
 
 // (Optional) Use core fonts; no external files needed
 // Helvetica/Helvetica-Bold render well in @react-pdf
@@ -312,6 +311,18 @@ const Section = ({
   </View>
 );
 
+/* -------------------------- Remove Confirmation -------------------------- */
+
+const confirmRemove = (onOk: () => void, what: string) => {
+  Modal.confirm({
+    title: "Remove item?",
+    content: `Are you sure you want to remove ${what}?`,
+    okText: "Yes, remove",
+    cancelText: "Cancel",
+    onOk,
+  });
+};
+
 /* -------------------------- PDF Component -------------------------- */
 
 const ResumePDF = ({ data }: { data: UiResume }) => {
@@ -343,15 +354,19 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
         {skills.length > 0 ? (
           <Section title="Skills">
             {skills.map((s, i) => {
-              const level = Math.min(
-                100,
+              // 0–10 → %
+              const level10 = Math.min(
+                10,
                 Math.max(0, Number(s?.skill_level) || 0),
               );
+              const levelPct = (level10 / 10) * 100;
               return (
                 <View key={i} style={styles.itemGap}>
                   <Text style={styles.paragraph}>{s?.skill_name || "-"}</Text>
                   <View style={styles.barWrap}>
-                    <View style={{ ...styles.barFill, width: `${level}%` }} />
+                    <View
+                      style={{ ...styles.barFill, width: `${levelPct}%` }}
+                    />
                   </View>
                 </View>
               );
@@ -473,13 +488,17 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
         {langs.length > 0 ? (
           <Section title="Languages">
             {langs.map((l, i) => {
-              const level = Math.min(100, Math.max(0, Number(l?.level) || 0));
+              // 0–10 → %
+              const level10 = Math.min(10, Math.max(0, Number(l?.level) || 0));
+              const levelPct = (level10 / 10) * 100;
               const levelText = l?.level_name || "";
               return (
                 <View key={i} style={{ marginBottom: 10 }}>
                   <Text style={styles.paragraph}>{l?.name}</Text>
                   <View style={styles.barWrap}>
-                    <View style={{ ...styles.barFill, width: `${level}%` }} />
+                    <View
+                      style={{ ...styles.barFill, width: `${levelPct}%` }}
+                    />
                   </View>
                   {levelText ? (
                     <Text
@@ -692,7 +711,7 @@ export default function AddEditResume() {
 
       skills: values.skills?.map((s: any) => ({
         skill_name: s?.skill_name,
-        skill_level: s?.skill_level,
+        skill_level: s?.skill_level, // expected 0–10
       })),
 
       education: educationPayload,
@@ -700,7 +719,7 @@ export default function AddEditResume() {
       languages: values.languages?.map((l: any) => ({
         name: l?.name,
         level_name: l?.level_name,
-        level: l?.level,
+        level: l?.level, // expected 0–10
       })),
 
       major_projects: values.major_projects?.map((p: any) => ({
@@ -791,13 +810,13 @@ export default function AddEditResume() {
                         <FormInput
                           fieldName={[name, "skill_level"]}
                           type={FIELD_TYPE.number}
-                          placeholder="0 - 100"
+                          placeholder="0 - 10"
                           rules={[
                             {
                               type: "number",
                               min: 0,
-                              max: 100,
-                              message: "0-100 allowed",
+                              max: 10,
+                              message: "0-10 allowed",
                             },
                           ]}
                         />
@@ -806,7 +825,9 @@ export default function AddEditResume() {
                         <ButtonComponent
                           text="-"
                           btnCustomType="outline"
-                          onClick={() => remove(name)}
+                          onClick={() =>
+                            confirmRemove(() => remove(name), "this skill")
+                          }
                         />
                       </Col>
                     </Row>
@@ -895,7 +916,7 @@ export default function AddEditResume() {
                             <FormInput
                               fieldName={[name, "location"]}
                               type={FIELD_TYPE.text}
-                              placeholder="City, Country"
+                              placeholder="Designation, City"
                             />
                           </Col>
                           <Col span={24}>
@@ -924,7 +945,12 @@ export default function AddEditResume() {
                                         <ButtonComponent
                                           text="-"
                                           btnCustomType="outline"
-                                          onClick={() => remove2(n2)}
+                                          onClick={() =>
+                                            confirmRemove(
+                                              () => remove2(n2),
+                                              "this highlight",
+                                            )
+                                          }
                                         />
                                       </Col>
                                     </Row>
@@ -944,7 +970,12 @@ export default function AddEditResume() {
                           <ButtonComponent
                             text="Remove"
                             btnCustomType="outline"
-                            onClick={() => remove(name)}
+                            onClick={() =>
+                              confirmRemove(
+                                () => remove(name),
+                                `Work #${index + 1}`,
+                              )
+                            }
                           />
                         </div>
                       </div>
@@ -1001,7 +1032,12 @@ export default function AddEditResume() {
                                       <ButtonComponent
                                         text="-"
                                         btnCustomType="outline"
-                                        onClick={() => remove2(n2)}
+                                        onClick={() =>
+                                          confirmRemove(
+                                            () => remove2(n2),
+                                            "this bullet",
+                                          )
+                                        }
                                       />
                                     </Col>
                                   </Row>
@@ -1020,7 +1056,9 @@ export default function AddEditResume() {
                         <ButtonComponent
                           text="Remove"
                           btnCustomType="outline"
-                          onClick={() => remove(name)}
+                          onClick={() =>
+                            confirmRemove(() => remove(name), "this project")
+                          }
                         />
                       </div>
                     </div>
@@ -1118,7 +1156,12 @@ export default function AddEditResume() {
                           <ButtonComponent
                             text="Remove"
                             btnCustomType="outline"
-                            onClick={() => remove(name)}
+                            onClick={() =>
+                              confirmRemove(
+                                () => remove(name),
+                                `Education #${index + 1}`,
+                              )
+                            }
                           />
                         </div>
                       </div>
@@ -1158,13 +1201,13 @@ export default function AddEditResume() {
                         <FormInput
                           fieldName={[name, "level"]}
                           type={FIELD_TYPE.number}
-                          placeholder="0 - 100"
+                          placeholder="0 - 10"
                           rules={[
                             {
                               type: "number",
                               min: 0,
-                              max: 100,
-                              message: "0-100 allowed",
+                              max: 10,
+                              message: "0-10 allowed",
                             },
                           ]}
                         />
@@ -1173,7 +1216,9 @@ export default function AddEditResume() {
                         <ButtonComponent
                           text="-"
                           btnCustomType="outline"
-                          onClick={() => remove(name)}
+                          onClick={() =>
+                            confirmRemove(() => remove(name), "this language")
+                          }
                         />
                       </Col>
                     </Row>
