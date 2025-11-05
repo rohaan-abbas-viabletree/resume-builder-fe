@@ -1,5 +1,3 @@
-import { ContainerType, Customer, Order, Supplier } from "@/app/client-types";
-
 export interface IOrderType {
   key: string;
   product: string;
@@ -26,25 +24,6 @@ export interface IOrderType {
   value_in_kilogram?: number;
   originalProduct?: string;
 }
-
-export type OrderType = {
-  documentId: string;
-  order_id: string;
-  created_at: string;
-  supplier: Supplier;
-  supplier_order_no: Order["supplier_order_no"];
-  customer: Customer;
-  order_product: Order["order_product"];
-  status: string;
-  data: Order["order_product"];
-  to: Order["to"];
-  from: Order["from"];
-  supplier_location: Order["supplier_location"];
-  shipment_type?: {
-    documentId: string;
-    name: string;
-  } | null;
-};
 
 export type CountType = {
   id: string;
@@ -79,7 +58,6 @@ export interface TransportFields {
   in_token_date: string;
   acceptance_no: string;
   acceptance_dpw_no: string;
-  container_type: string | ContainerType;
   vessel?: string | null;
 }
 

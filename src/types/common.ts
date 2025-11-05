@@ -2,10 +2,7 @@ import { ColProps, DatePickerProps, Form, GetRef, TableProps } from "antd";
 import { SizeType } from "antd/es/config-provider/SizeContext";
 import { DefaultOptionType } from "antd/es/select";
 import { ReactNode } from "react";
-import {
-  ComponentCommonComponentMultiValueField,
-  Invoice,
-} from "@/app/client-types";
+
 import { IOrderType, TransportFields } from "./order";
 
 export type IFieldType = {
@@ -132,14 +129,6 @@ export interface EditableRowProps {
 export type FormInstanceType<T> = GetRef<typeof Form<T>>;
 
 export type IFunctionMultiParams = (...rest: any) => void;
-
-export type ExtendedInvoice = Invoice & {
-  bl_no: string;
-  bl_document_id?: string;
-  reference_no: string | null | undefined;
-  ed_no: ComponentCommonComponentMultiValueField[];
-  doc_type?: string;
-};
 
 export type IDefaultCardFileType = {
   name: string;

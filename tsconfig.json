@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "target": "ES2017",
     "lib": [
       "dom",
       "dom.iterable",
@@ -14,26 +15,34 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // ✅ Important for Next.js (Next enforces preserve)
     "jsx": "preserve",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
+    // ✅ Force React/Next types to load
+    "types": [
+      "react",
+      "react-dom",
+      "node",
+      "next"
     ],
     "paths": {
       "@/*": [
         "./src/*"
       ]
     },
-    "target": "ES2017"
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
-, "src/lib/hooks/socket.js"  ],
+    ".next/types/**/*.ts",
+    "src"
+  ],
   "exclude": [
     "node_modules"
   ]

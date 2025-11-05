@@ -2,8 +2,6 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Col, Form, Row, Space, TableProps } from "antd";
-import dayjs from "dayjs";
-
 import ButtonComponent from "@/components/ButtonComponent/ButtonComponent";
 import CustomTable from "@/components/CustomTable/CustomTable";
 import FormInput from "@/components/FormInput/FormInput";
@@ -11,15 +9,14 @@ import { FIELD_TYPE } from "@/static/constants";
 import { EditIcon } from "@/Images";
 import { useGetResumesConnectionQuery } from "@/graphql/resume/resume.generated";
 
-// ✅ Import your GraphQL hook
-
 type ResumeRow = {
   documentId: string;
   name: string;
+  resume_ref_id: string;
 };
 
 export default function ResumeManagementListing() {
-  // 📌 State
+  // State
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
@@ -27,26 +24,30 @@ export default function ResumeManagementListing() {
   const router = useRouter();
   const [form] = Form.useForm();
 
-  // ✅ Filters dynamically (search by `name`)
+  // Filters: search in name OR resume_ref_id
   const filters = search.trim()
     ? {
-        name: { containsi: search.trim() },
+        or: [
+          { name: { containsi: search.trim() } },
+          { resume_ref_id: { containsi: search.trim() } },
+        ],
       }
     : {};
 
-  // ✅ Call GraphQL API
+  // Query
   const { data, isLoading } = useGetResumesConnectionQuery({
     pagination: { page, pageSize },
     sort: ["name:asc"],
     filters,
   });
 
-  // ✅ Format table data
+  // Table data
   const tableData = useMemo(() => {
     const rows: ResumeRow[] =
       data?.resumes_connection?.nodes?.map((r: any) => ({
         documentId: r?.documentId as string,
         name: r?.name || "-",
+        resume_ref_id: r?.resume_ref_id || "-",
       })) || [];
 
     return {
@@ -55,17 +56,27 @@ export default function ResumeManagementListing() {
     };
   }, [data]);
 
-  // ✅ Row click handler
+  // Row click
   const onRowClick = (row: ResumeRow) => {
     router.push(`/resume/${row.documentId}`);
   };
 
-  // ✅ Table columns
+  // Columns
   const columns: TableProps<ResumeRow>["columns"] = [
     {
       title: "Resume Name",
       dataIndex: "name",
       key: "name",
+      render: (val, record) => (
+        <p className="cursor-pointer" onClick={() => onRowClick(record)}>
+          {val}
+        </p>
+      ),
+    },
+    {
+      title: "Reference ID",
+      dataIndex: "resume_ref_id",
+      key: "resume_ref_id",
       render: (val, record) => (
         <p className="cursor-pointer" onClick={() => onRowClick(record)}>
           {val}
@@ -91,7 +102,7 @@ export default function ResumeManagementListing() {
     },
   ];
 
-  // ✅ Search handler
+  // Search handler
   const handleFilterSubmit = (v: { search: string }) => {
     setSearch(v.search?.trim() || "");
     setPage(1);
@@ -103,14 +114,14 @@ export default function ResumeManagementListing() {
         Resume Management
       </h1>
 
-      {/* 🔍 Search + Add Button */}
+      {/* Search + Add Button */}
       <Row gutter={[8, 8]}>
         <Col flex="auto">
           <Form form={form} onFinish={handleFilterSubmit}>
             <FormInput
               fieldName="search"
               type={FIELD_TYPE.textSearch}
-              placeholder="Search by Name"
+              placeholder="Search by Name or Reference ID"
               size="large"
               onChange={(e) => handleFilterSubmit({ search: e.target.value })}
             />
@@ -133,7 +144,7 @@ export default function ResumeManagementListing() {
         </Col>
       </Row>
 
-      {/* 📋 Table */}
+      {/* Table */}
       <CustomTable
         data={tableData.data}
         total={tableData.total}

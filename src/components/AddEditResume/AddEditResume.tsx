@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Form, Row, Col, Divider } from "antd";
+import dynamic from "next/dynamic";
+import { Form, Row, Col, Divider, Switch } from "antd";
 import { useRouter, useParams } from "next/navigation";
-import dayjs from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import FormInput from "@/components/FormInput/FormInput";
 import LabelComponent from "@/components/LabelComponent/LabelComponent";
 import ButtonComponent from "@/components/ButtonComponent/ButtonComponent";
@@ -16,14 +17,20 @@ import {
 } from "@/graphql/resume/resume.mutation.generated";
 
 import {
-  PDFViewer,
   Document,
   Page,
   Text,
   View,
   StyleSheet,
   pdf,
+  Font,
 } from "@react-pdf/renderer";
+
+// 👇 Load PDFViewer client-only to avoid SSR issues
+const PDFViewer = dynamic(
+  () => import("@react-pdf/renderer").then((mod) => mod.PDFViewer),
+  { ssr: false },
+);
 
 /* -------------------------- Utils -------------------------- */
 
@@ -35,43 +42,44 @@ const stripHtml = (html?: string) =>
     .replace(/&nbsp;/g, " ")
     .trim();
 
-const normalizeNullsDeep = (input: unknown): any => {
-  if (input === null) return undefined;
-  if (Array.isArray(input)) {
-    return input.filter((v) => v != null).map((v) => normalizeNullsDeep(v));
-  }
-  if (typeof input === "object" && input) {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(input)) out[k] = normalizeNullsDeep(v);
-    return out;
-  }
-  return input;
-};
-
-const isDJ = (v: any) =>
+const isDJ = (v: any): v is Dayjs =>
   typeof v === "object" &&
   v &&
   typeof v.isValid === "function" &&
   typeof v.format === "function";
 
+const normalizeNullsDeep = (input: unknown): any => {
+  if (isDJ(input) || input instanceof Date) return input;
+  if (input === null) return undefined;
+
+  if (Array.isArray(input)) {
+    return input.map((v) => (v === null ? undefined : normalizeNullsDeep(v)));
+  }
+
+  if (typeof input === "object" && input) {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(input)) {
+      out[k] = isDJ(v) || v instanceof Date ? v : normalizeNullsDeep(v);
+    }
+    return out;
+  }
+
+  return input;
+};
+
+// ✅ Safe date formatter (accepts string/number/Date/dayjs)
 const fmtDate = (v: any, fmt = "YYYY-MM-DD"): string => {
   if (!v) return "";
   if (isDJ(v)) return v.isValid() ? v.format(fmt) : "";
+  const primitive =
+    typeof v === "string" || typeof v === "number" || v instanceof Date;
+  if (!primitive) return "";
   const d = dayjs(v as any);
   return d.isValid() ? d.format(fmt) : "";
 };
 
-// Display helper: "Nov 2025 – Present"
-const dateRangeLabel = (start?: any, end?: any): string => {
-  const s = fmtDate(start, "MMM YYYY");
-  const e = fmtDate(end, "MMM YYYY");
-  if (s && e) return `${s} – ${e}`;
-  if (s && !e) return `${s} – Present`;
-  return s || e || "";
-};
-
 // ---- Config: set true if Strapi has start_date/end_date fields ----
-const BACKEND_HAS_DATE_RANGE = true; // set to false if your backend only has "date"
+const BACKEND_HAS_DATE_RANGE = true; // set false if backend only has single "date"
 
 // Build a pair from either (start/end) or from a single 'date'
 const toPair = (start?: any, end?: any, single?: any) => {
@@ -87,7 +95,7 @@ const toRangeValue = (
   start?: any,
   end?: any,
   single?: any,
-): [any | undefined, any | undefined] | undefined => {
+): [Dayjs | undefined, Dayjs | undefined] | undefined => {
   const { start: s, end: e } = toPair(start, end, single);
   const sv = s && s.isValid() ? s : undefined;
   const ev = e && e.isValid() ? e : undefined;
@@ -95,7 +103,7 @@ const toRangeValue = (
   return [sv, ev];
 };
 
-// RangePicker -> { start_date, end_date } strings
+// RangePicker or single Date -> { start_date, end_date }
 const serializeRangeToPair = (
   v: any,
 ): { start_date?: string; end_date?: string } => {
@@ -122,13 +130,10 @@ type UiResume = {
     id?: string;
     education_name?: string;
     education_info?: string;
-
-    // ✅ UI RangePicker only
-    date?: [any, any] | undefined;
-
-    // ✅ API values
-    start_date?: string | null;
-    end_date?: string | null;
+    date?: [Dayjs | undefined, Dayjs | undefined] | Dayjs | undefined; // UI (range or single)
+    start_date?: string | null; // API
+    end_date?: string | null; // API
+    is_current?: boolean; // API
   }>;
 
   work_history?: Array<{
@@ -136,14 +141,11 @@ type UiResume = {
     designation?: string;
     location?: string;
     description?: string;
-
-    // ✅ UI RangePicker only
-    date?: [any, any] | undefined;
-
-    // ✅ API values
-    start_date?: string | null;
-    end_date?: string | null;
+    date?: [Dayjs | undefined, Dayjs | undefined] | Dayjs | undefined; // UI
+    start_date?: string | null; // API
+    end_date?: string | null; // API
     list?: Array<{ description?: string }>;
+    is_current?: boolean; // API
   }>;
 
   languages?: Array<{
@@ -167,28 +169,148 @@ type UiResume = {
 
 /* -------------------------- PDF Styles -------------------------- */
 
-const styles = StyleSheet.create({
-  page: { padding: 28, fontSize: 11, color: "#111" },
-  //   header: { borderBottom: "1 solid #eee", paddingBottom: 10, marginBottom: 14 },
-  name: { fontSize: 22, fontWeight: 700 },
-  ref_id: { fontSize: 26, fontWeight: 500, color: "#191970" },
-  designation: { fontSize: 12, marginTop: 4, color: "#191970" },
+const toTime = (v: any): number => {
+  const d = dayjs(v);
+  return d.isValid() ? d.valueOf() : Number.NEGATIVE_INFINITY;
+};
 
-  section: { marginTop: 14, borderBottom: "1 solid #eee", paddingTop: 8 },
-  title: { fontSize: 16, fontWeight: 700, marginBottom: 6, color: "#191970" },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 700,
-    marginBottom: 6,
-    color: "#191970",
+const eduSortDesc = (a: any, b: any) => {
+  // Treat current as "now"
+  const aEnd = a?.is_current ? Date.now() : toTime(a?.end_date);
+  const bEnd = b?.is_current ? Date.now() : toTime(b?.end_date);
+  if (aEnd !== bEnd) return bEnd - aEnd;
+
+  const aStart = toTime(a?.start_date);
+  const bStart = toTime(b?.start_date);
+  if (aStart !== bStart) return bStart - aStart;
+
+  return 0;
+};
+
+const yearRange = (start?: any, end?: any, isCurrent?: boolean): string => {
+  const sy = fmtDate(start, "YYYY");
+  if (isCurrent) return sy ? `${sy}-Present` : "Present";
+  const ey = fmtDate(end, "YYYY");
+  return sy && ey ? `${sy}-${ey}` : sy || ey || "";
+};
+
+/* -------------------------- PDF Component -------------------------- */
+/* -------------------------- PDF Styles -------------------------- */
+
+// (Optional) Use core fonts; no external files needed
+// Helvetica/Helvetica-Bold render well in @react-pdf
+Font.registerHyphenationCallback((word) => [word]); // avoid weird hyphenation
+
+const COLOR_TEXT = "#0f172a"; // slate-900
+const COLOR_MUTED = "#6b7280"; // gray-500
+const COLOR_DIVIDER = "#e5e7eb"; // gray-200
+const COLOR_ACCENT = "#1f2a44"; // deep slate
+const COLOR_BAR_BG = "#e5e7eb";
+const COLOR_BAR_FG = "#1e293b"; // slate-800
+
+const styles = StyleSheet.create({
+  page: {
+    paddingTop: 36,
+    paddingBottom: 36,
+    paddingHorizontal: 40,
+    fontSize: 10.5,
+    color: COLOR_TEXT,
+    fontFamily: "Helvetica",
+    lineHeight: 1.45,
   },
 
-  row: { marginBottom: 8 },
-  label: { fontSize: 12, fontWeight: 600 },
-  meta: { fontSize: 10, color: "#666", marginTop: 2 },
-  paragraph: { marginTop: 4, lineHeight: 1.4, color: "#191970" },
-  bullet: { marginLeft: 10, marginTop: 2 },
+  // Header
+  ref_id: {
+    fontSize: 22,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_ACCENT,
+    letterSpacing: 0.2,
+  },
+  designation: {
+    fontSize: 11.5,
+    marginTop: 10,
+    color: COLOR_ACCENT,
+  },
+
+  // Section framing
+  section: {
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderTop: `1 solid ${COLOR_DIVIDER}`,
+    marginTop: 12,
+  },
+  sectionTitle: {
+    fontSize: 12.5,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_ACCENT,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+
+  // Text styles
+  paragraph: {
+    marginTop: 2,
+    fontSize: 10.5,
+    lineHeight: 1.55,
+    color: COLOR_TEXT,
+  },
+  label: {
+    fontSize: 11,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_TEXT,
+  },
+  meta: {
+    fontSize: 10,
+    color: COLOR_MUTED,
+    marginTop: 1,
+  },
+  bullet: {
+    marginLeft: 10,
+    marginTop: 2,
+    fontSize: 10.2,
+  },
+
+  // Layout helpers
+  rowItem: {
+    flexDirection: "row",
+    marginBottom: 10,
+  },
+  colLeft: { width: "30%", paddingRight: 8 },
+  colRight: { width: "70%" },
+
+  // Bars (skills/language)
+  barWrap: {
+    marginTop: 3,
+    width: "100%",
+    height: 6.5,
+    backgroundColor: COLOR_BAR_BG,
+    borderRadius: 3.5,
+  },
+  barFill: {
+    height: "100%",
+    backgroundColor: COLOR_BAR_FG,
+    borderRadius: 3.5,
+  },
+
+  // Minor spacers
+  itemGap: { marginBottom: 6 },
 });
+
+/* -------------------------- Helper: Section -------------------------- */
+
+const Section = ({
+  title,
+  children,
+}: {
+  title?: string;
+  children?: React.ReactNode;
+}) => (
+  <View style={styles.section}>
+    {title ? <Text style={styles.sectionTitle}>{title}</Text> : null}
+    {children}
+  </View>
+);
 
 /* -------------------------- PDF Component -------------------------- */
 
@@ -204,8 +326,7 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View>
-          {/* <Text style={styles.name}>{data?.name || "Your Name"}</Text> */}
-          <Text style={styles.ref_id}>{data?.resume_ref_id}</Text>
+          <Text style={styles.ref_id}>{data?.resume_ref_id || ""}</Text>
           {data?.designation ? (
             <Text style={styles.designation}>{data.designation}</Text>
           ) : null}
@@ -213,125 +334,88 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
 
         {/* Introduction */}
         {data?.introduction ? (
-          <View style={styles.section}>
+          <Section>
             <Text style={styles.paragraph}>{stripHtml(data.introduction)}</Text>
-          </View>
+          </Section>
         ) : null}
 
         {/* Skills */}
         {skills.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Skills</Text>
+          <Section title="Skills">
             {skills.map((s, i) => {
-              const level = Number(s?.skill_level) || 0; // 0–100
-
+              const level = Math.min(
+                100,
+                Math.max(0, Number(s?.skill_level) || 0),
+              );
               return (
-                <View key={i} style={{ marginBottom: 6 }}>
+                <View key={i} style={styles.itemGap}>
                   <Text style={styles.paragraph}>{s?.skill_name || "-"}</Text>
-
-                  {/* ✅ Progress bar */}
-                  <View
-                    style={{
-                      marginTop: 2,
-                      width: "100%",
-                      height: 10,
-                      backgroundColor: "#d9d9d9",
-                      borderRadius: 3,
-                    }}>
-                    <View
-                      style={{
-                        width: `${level}%`,
-                        height: "100%",
-                        backgroundColor: "#2f3f63", // Dark blue
-                        borderRadius: 3,
-                      }}
-                    />
+                  <View style={styles.barWrap}>
+                    <View style={{ ...styles.barFill, width: `${level}%` }} />
                   </View>
                 </View>
               );
             })}
-          </View>
+          </Section>
         ) : null}
 
-        {/* Education */}
-        {edu.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Education</Text>
-            {edu.map((e, i) => (
-              <View key={i} style={styles.row}>
-                <Text style={styles.label}>{e?.education_name || "—"}</Text>
-                {e?.start_date || e?.end_date ? (
-                  <Text style={styles.meta}>
-                    {dateRangeLabel(e?.start_date, e?.end_date)}
-                  </Text>
-                ) : null}
-                {e?.education_info ? (
-                  <Text style={styles.paragraph}>
-                    {stripHtml(e.education_info)}
-                  </Text>
-                ) : null}
-              </View>
-            ))}
-          </View>
-        ) : null}
+        {/* Work Experience */}
+        {work.length > 0 ? (
+          <Section title="Work Experience">
+            {[...work]
+              .sort((a, b) => {
+                const aEnd = a?.is_current ? Date.now() : toTime(a?.end_date);
+                const bEnd = b?.is_current ? Date.now() : toTime(b?.end_date);
+                if (aEnd !== bEnd) return bEnd - aEnd;
+                return toTime(b?.start_date) - toTime(a?.start_date);
+              })
+              .map((w, i) => {
+                const start = fmtDate(w?.start_date, "YYYY-MM") || "";
+                const end = w?.is_current
+                  ? "Current"
+                  : fmtDate(w?.end_date, "YYYY-MM") || "";
+                return (
+                  <View key={i} style={styles.rowItem}>
+                    {/* LEFT: date range */}
+                    <View style={styles.colLeft}>
+                      <Text style={styles.meta}>
+                        {start} {start && "–"} {end}
+                      </Text>
+                    </View>
 
-        {/* Languages */}
-        {langs.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Languages</Text>
-            {langs.map((l, i) => {
-              const level = Number(l?.level) || 0; // 0 - 100 %
-              const levelText = l?.level_name || ""; // e.g. Professional Working
-
-              return (
-                <View key={i} style={{ marginBottom: 10 }}>
-                  {/* Language Name */}
-                  <Text style={{ fontSize: 12, fontWeight: 500 }}>
-                    {l?.name}
-                  </Text>
-
-                  {/* Progress Bar */}
-                  <View
-                    style={{
-                      marginTop: 3,
-                      width: "100%",
-                      height: 10,
-                      backgroundColor: "#dcdcdc", // light grey
-                      borderRadius: 3,
-                      position: "relative",
-                    }}>
-                    <View
-                      style={{
-                        width: `${level}%`,
-                        height: "100%",
-                        backgroundColor: "#2f3f63", // dark blue
-                        borderRadius: 3,
-                      }}
-                    />
+                    {/* RIGHT: role details */}
+                    <View style={styles.colRight}>
+                      <Text style={styles.label}>
+                        {w?.designation || "Designation"}
+                      </Text>
+                      {w?.location ? (
+                        <Text style={styles.meta}>{w.location}</Text>
+                      ) : null}
+                      {w?.description ? (
+                        <Text style={styles.paragraph}>
+                          {stripHtml(w.description)}
+                        </Text>
+                      ) : null}
+                      {Array.isArray(w?.list) &&
+                        w.list.map((li, idx) =>
+                          li?.description ? (
+                            <Text key={idx} style={styles.bullet}>
+                              • {stripHtml(li.description)}
+                            </Text>
+                          ) : null,
+                        )}
+                    </View>
                   </View>
-
-                  {/* Level Name under bar (right aligned) */}
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      color: "#444",
-                      textAlign: "right",
-                      marginTop: 2,
-                    }}>
-                    {levelText}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
+                );
+              })}
+          </Section>
         ) : null}
 
         {/* Major Projects */}
         {projects.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Major Projects</Text>
+          <Section title="Major Projects">
             {projects.map((p, i) => (
-              <View key={i} style={styles.row}>
+              <View key={i} style={{ marginBottom: 10 }}>
                 <Text style={styles.label}>{p?.name || "—"}</Text>
                 {p?.project_info ? (
                   <Text style={styles.paragraph}>
@@ -344,51 +428,73 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
                   </Text>
                 ) : null}
                 {p?.project_list?.length ? (
-                  <View style={{ marginTop: 4 }}>
-                    {p.project_list!.map((li, idx) => (
-                      <Text key={idx} style={styles.bullet}>
-                        • {stripHtml(li?.description)}
-                      </Text>
-                    ))}
+                  <View style={{ marginTop: 2 }}>
+                    {p.project_list!.map((li, idx) =>
+                      li?.description ? (
+                        <Text key={idx} style={styles.bullet}>
+                          • {stripHtml(li.description)}
+                        </Text>
+                      ) : null,
+                    )}
                   </View>
                 ) : null}
               </View>
             ))}
-          </View>
+          </Section>
         ) : null}
 
-        {/* Work History */}
-        {work.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Work Experience</Text>
-            {work.map((w, i) => (
-              <View key={i} style={styles.row}>
-                <Text style={styles.label}>
-                  {w?.designation || "Designation"}
-                  {w?.location ? ` – ${w.location}` : ""}
-                </Text>
-                {w?.start_date || w?.end_date ? (
+        {/* Education */}
+        {edu.length > 0 ? (
+          <Section title="Education">
+            {[...edu].sort(eduSortDesc).map((e, i) => (
+              <View key={i} style={styles.rowItem}>
+                {/* LEFT: years */}
+                <View style={styles.colLeft}>
                   <Text style={styles.meta}>
-                    {dateRangeLabel(w?.start_date, w?.end_date)}
+                    {yearRange(e?.start_date, e?.end_date, e?.is_current)}
                   </Text>
-                ) : null}
-                {w?.description ? (
-                  <Text style={styles.paragraph}>
-                    {stripHtml(w.description)}
-                  </Text>
-                ) : null}
-                {w?.list?.length ? (
-                  <View style={{ marginTop: 4 }}>
-                    {w.list!.map((li, idx) => (
-                      <Text key={idx} style={styles.bullet}>
-                        • {stripHtml(li?.description)}
-                      </Text>
-                    ))}
-                  </View>
-                ) : null}
+                </View>
+
+                {/* RIGHT: details */}
+                <View style={styles.colRight}>
+                  <Text style={styles.label}>{e?.education_name || "—"}</Text>
+                  {e?.education_info ? (
+                    <Text style={styles.paragraph}>
+                      {stripHtml(e.education_info)}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             ))}
-          </View>
+          </Section>
+        ) : null}
+
+        {/* Languages */}
+        {langs.length > 0 ? (
+          <Section title="Languages">
+            {langs.map((l, i) => {
+              const level = Math.min(100, Math.max(0, Number(l?.level) || 0));
+              const levelText = l?.level_name || "";
+              return (
+                <View key={i} style={{ marginBottom: 10 }}>
+                  <Text style={styles.paragraph}>{l?.name}</Text>
+                  <View style={styles.barWrap}>
+                    <View style={{ ...styles.barFill, width: `${level}%` }} />
+                  </View>
+                  {levelText ? (
+                    <Text
+                      style={{
+                        ...styles.meta,
+                        textAlign: "right",
+                        marginTop: 2,
+                      }}>
+                      {levelText}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </Section>
         ) : null}
       </Page>
     </Document>
@@ -400,7 +506,9 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
 export default function AddEditResume() {
   const router = useRouter();
   const params = useParams();
-  const resumeId = Array.isArray(params?.id) ? params.id[0] : params?.id || "";
+  const resumeId = Array.isArray(params?.id)
+    ? params.id[0]
+    : (params?.id as string) || "";
 
   const [form] = Form.useForm();
   const [previewData, setPreviewData] = useState<UiResume>({});
@@ -413,7 +521,7 @@ export default function AddEditResume() {
     { enabled: !!resumeId },
   );
 
-  // API -> UI (build RangePicker values from start_date/end_date)
+  // API -> UI (build Date/Range values)
   useEffect(() => {
     if (!data?.resume) return;
 
@@ -423,16 +531,24 @@ export default function AddEditResume() {
       ...ui,
       education: ui.education?.map((e) => ({
         ...e,
-        date: toRangeValue(e?.start_date, e?.end_date, e?.date), // <-- accept legacy single date
+        date: toRangeValue(e?.start_date, e?.end_date, (e as any)?.date),
       })),
       work_history: ui.work_history?.map((w) => ({
         ...w,
-        date: toRangeValue(w?.start_date, w?.end_date, w?.date), // <-- accept legacy single date
+        date: toRangeValue(w?.start_date, w?.end_date, (w as any)?.date),
       })),
     };
 
     form.setFieldsValue(uiForForm as any);
     setPreviewData(uiForForm);
+
+    console.groupCollapsed(
+      "%c[useEffect] Loaded resume → uiForForm",
+      "color:#2f3f63",
+    );
+    console.log("work_history:", uiForForm.work_history);
+    console.log("education:", uiForForm.education);
+    console.groupEnd();
   }, [data, form]);
 
   const { mutateAsync: createResume, isLoading: creating } =
@@ -446,35 +562,90 @@ export default function AddEditResume() {
 
   const { mutateAsync: updateResume, isLoading: updating } =
     useUpdateResumeMutation({
-      onSuccess: () => {
-        openNotification("Resume updated successfully!");
-      },
+      onSuccess: () => openNotification("Resume updated successfully!"),
     });
 
   // Debounced live preview
-  const onFormValuesChange = (_: any, all: any) => {
-    const next = normalizeNullsDeep(all) as UiResume;
+  const onFormValuesChange = (_changed: any, allValues: any) => {
+    console.groupCollapsed("%c[onValuesChange] Triggered", "color:#8a2be2");
+    const newData = normalizeNullsDeep(allValues) as UiResume;
 
-    // derive start/end for preview so PDF shows instantly
-    next.education = next.education?.map((e) => {
-      const { start_date, end_date } = serializeRangeToPair(e?.date);
-      return { ...e, start_date, end_date };
+    const prevWork = previewData.work_history || [];
+    const prevEdu = previewData.education || [];
+
+    // ---- Work History ----
+    newData.work_history = newData.work_history?.map((item, index) => {
+      const old = prevWork[index];
+      const next = { ...item };
+
+      if (Array.isArray(item?.date) && (item.date[0] || item.date[1])) {
+        const { start_date, end_date } = serializeRangeToPair(item.date);
+        next.start_date = start_date;
+        next.end_date = end_date;
+      } else {
+        // single date or untouched → preserve previous if any
+        const { start_date } = serializeRangeToPair(item?.date);
+        next.start_date =
+          start_date ?? old?.start_date ?? item?.start_date ?? null;
+        next.end_date = old?.end_date ?? item?.end_date ?? null;
+      }
+
+      // If marked current, drop end_date
+      if (next?.is_current) next.end_date = null;
+
+      return next;
     });
 
-    next.work_history = next.work_history?.map((w) => {
-      const { start_date, end_date } = serializeRangeToPair(w?.date);
-      return { ...w, start_date, end_date };
+    // ---- Education ----
+    newData.education = newData.education?.map((item, index) => {
+      const old = prevEdu[index];
+      const next = { ...item };
+
+      if (Array.isArray(item?.date) && (item.date[0] || item.date[1])) {
+        const { start_date, end_date } = serializeRangeToPair(item.date);
+        next.start_date = start_date;
+        next.end_date = end_date;
+      } else {
+        const { start_date } = serializeRangeToPair(item?.date);
+        next.start_date =
+          start_date ?? old?.start_date ?? item?.start_date ?? null;
+        next.end_date = old?.end_date ?? item?.end_date ?? null;
+      }
+
+      if (next?.is_current) next.end_date = null;
+
+      return next;
     });
 
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => setPreviewData(next));
-    }, 200);
+      rafRef.current = requestAnimationFrame(() => setPreviewData(newData));
+      console.groupEnd();
+    }, 150);
   };
 
   const handleSave = async () => {
+    // Validate only the required reference id
+    try {
+      // Force-trim value before validating
+      const ridRaw = form.getFieldValue("resume_ref_id");
+      if (typeof ridRaw === "string") {
+        form.setFieldsValue({ resume_ref_id: ridRaw.trim() });
+      }
+      await form.validateFields(["resume_ref_id"]);
+    } catch {
+      openNotification("Please provide the Resume Reference ID.", "error");
+      return;
+    }
+
     const values = form.getFieldsValue();
+
+    // Double guard (in case someone bypasses UI)
+    if (!values?.resume_ref_id || !String(values.resume_ref_id).trim()) {
+      openNotification("Resume Reference ID is required.");
+      return;
+    }
 
     // Build normalized arrays first so we can branch payloads cleanly
     const eduNormalized = values.education?.map((e: any) => {
@@ -483,8 +654,9 @@ export default function AddEditResume() {
         id: e?.id,
         education_name: e?.education_name,
         education_info: e?.education_info,
+        is_current: !!e?.is_current,
         start_date,
-        end_date,
+        end_date: e?.is_current ? null : end_date,
         date: start_date || null, // for legacy single-date backends
       };
     });
@@ -493,27 +665,27 @@ export default function AddEditResume() {
       const { start_date, end_date } = serializeRangeToPair(w?.date);
       return {
         id: w?.id,
-        start_date,
-        end_date,
-        date: start_date || null, // for legacy single-date backends
         designation: w?.designation,
         location: w?.location,
         description: w?.description,
         list: w?.list?.map((li: any) => ({ description: li?.description })),
+        is_current: !!w?.is_current,
+        start_date,
+        end_date: w?.is_current ? null : end_date,
+        date: start_date || null,
       };
     });
 
-    // Choose payload depending on backend
     const educationPayload = BACKEND_HAS_DATE_RANGE
-      ? eduNormalized?.map(({ date, ...rest }: any) => rest) // drop 'date'
-      : eduNormalized?.map(({ start_date, end_date, ...rest }: any) => rest); // drop pair, keep 'date'
+      ? eduNormalized?.map(({ date, ...rest }: any) => rest)
+      : eduNormalized?.map(({ start_date, end_date, ...rest }: any) => rest);
 
     const workPayload = BACKEND_HAS_DATE_RANGE
       ? workNormalized?.map(({ date, ...rest }: any) => rest)
       : workNormalized?.map(({ start_date, end_date, ...rest }: any) => rest);
 
     const payload = normalizeNullsDeep({
-      resume_ref_id: values.resume_ref_id,
+      resume_ref_id: String(values.resume_ref_id).trim(),
       name: values.name,
       designation: values.designation,
       introduction: values.introduction,
@@ -572,7 +744,10 @@ export default function AddEditResume() {
       <h1 className="text-3xl font-bold mb-6">
         {resumeId ? "Edit Resume" : "Create Resume"}
       </h1>
-
+      <ButtonComponent
+        text="Back to listing"
+        onClick={() => router.push("/")}
+      />
       <Row gutter={32}>
         {/* LEFT: FORM */}
         <Col span={12}>
@@ -583,15 +758,19 @@ export default function AddEditResume() {
             <Divider orientation="left">Personal Details</Divider>
 
             <LabelComponent text="Resume Reference ID" />
-            <FormInput fieldName="resume_ref_id" type={FIELD_TYPE.text} />
+            <FormInput
+              fieldName="resume_ref_id"
+              type={FIELD_TYPE.text}
+              rules={[{ required: true }]}
+            />
 
-            <LabelComponent text="Full Name" />
+            <LabelComponent text="Full Name" required={false} />
             <FormInput fieldName="name" type={FIELD_TYPE.text} />
 
-            <LabelComponent text="Designation" />
+            <LabelComponent text="Designation" required={false} />
             <FormInput fieldName="designation" type={FIELD_TYPE.text} />
 
-            <LabelComponent text="Introduction" />
+            <LabelComponent text="Introduction" required={false} />
             <FormInput fieldName="introduction" type={FIELD_TYPE.textArea} />
 
             {/* Skills */}
@@ -611,7 +790,7 @@ export default function AddEditResume() {
                       <Col span={10}>
                         <FormInput
                           fieldName={[name, "skill_level"]}
-                          type={FIELD_TYPE.number} // ✅ Number input
+                          type={FIELD_TYPE.number}
                           placeholder="0 - 100"
                           rules={[
                             {
@@ -641,103 +820,138 @@ export default function AddEditResume() {
               )}
             </Form.List>
 
-            {/* Education */}
-            <Divider orientation="left">Education</Divider>
-            <Form.List name="education">
+            {/* Work History */}
+            <Divider orientation="left">Work History</Divider>
+            <Form.List name="work_history">
               {(fields, { add, remove }) => (
                 <>
-                  {fields.map(({ key, name }) => (
-                    <div
-                      key={key}
-                      className="mb-4 p-3 border rounded-md bg-gray-50">
-                      <Row gutter={12}>
-                        <Col span={12}>
-                          <FormInput
-                            fieldName={[name, "education_name"]}
-                            type={FIELD_TYPE.text}
-                            placeholder="Degree / Program"
-                          />
-                        </Col>
-                        <Col span={12}>
-                          {/* form-only 'date' (range) */}
-                          <FormInput
-                            fieldName={[name, "date"]}
-                            type={FIELD_TYPE.dateRange}
-                          />
-                        </Col>
-                        <Col span={24}>
-                          <FormInput
-                            fieldName={[name, "education_info"]}
-                            type={FIELD_TYPE.textArea}
-                            placeholder="Details, institute, GPA, etc."
-                          />
-                        </Col>
-                      </Row>
-                      <div className="mt-2">
-                        <ButtonComponent
-                          text="Remove"
-                          btnCustomType="outline"
-                          onClick={() => remove(name)}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <ButtonComponent
-                    text="Add Education"
-                    btnCustomType="inner-primary"
-                    onClick={() => add()}
-                  />
-                </>
-              )}
-            </Form.List>
+                  {fields.map(({ key, name }, index) => {
+                    const isLast = index === fields.length - 1;
 
-            {/* Languages */}
-            <Divider orientation="left">Languages</Divider>
-            <Form.List name="languages">
-              {(fields, { add, remove }) => (
-                <>
-                  {fields.map(({ key, name }) => (
-                    <Row key={key} gutter={12} className="mb-2">
-                      <Col span={10}>
-                        <FormInput
-                          fieldName={[name, "name"]}
-                          type={FIELD_TYPE.text}
-                          placeholder="Language"
-                        />
-                      </Col>
-                      <Col span={7}>
-                        <FormInput
-                          fieldName={[name, "level_name"]}
-                          type={FIELD_TYPE.text}
-                          placeholder="e.g. Fluent"
-                        />
-                      </Col>
-                      <Col span={5}>
-                        <FormInput
-                          fieldName={[name, "level"]}
-                          type={FIELD_TYPE.number}
-                          placeholder="0 - 100"
-                          rules={[
-                            {
-                              type: "number",
-                              min: 0,
-                              max: 100,
-                              message: "0-100 allowed",
-                            },
-                          ]}
-                        />
-                      </Col>
-                      <Col span={2}>
-                        <ButtonComponent
-                          text="-"
-                          btnCustomType="outline"
-                          onClick={() => remove(name)}
-                        />
-                      </Col>
-                    </Row>
-                  ))}
+                    return (
+                      <div
+                        key={key}
+                        className="mb-4 p-3 border rounded-md bg-gray-50">
+                        {/* Top bar with Current toggle only for LAST item */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="text-sm font-medium text-gray-600">
+                            Work #{index + 1}
+                          </div>
+                          {isLast && (
+                            <Form.Item
+                              name={[name, "is_current"]}
+                              valuePropName="checked"
+                              className="mb-0">
+                              <Switch
+                                size="small"
+                                checkedChildren="Current"
+                                unCheckedChildren="Past"
+                              />
+                            </Form.Item>
+                          )}
+                        </div>
+
+                        {/* Date + fields */}
+                        <Row gutter={12}>
+                          {/* Date input: single when current, range when past */}
+                          <Col span={12}>
+                            <Form.Item
+                              noStyle
+                              shouldUpdate={(p, c) =>
+                                p.work_history?.[index]?.is_current !==
+                                c.work_history?.[index]?.is_current
+                              }>
+                              {({ getFieldValue }) => {
+                                const cur = !!getFieldValue([
+                                  "work_history",
+                                  index,
+                                  "is_current",
+                                ]);
+                                return cur ? (
+                                  <FormInput
+                                    fieldName={[name, "date"]}
+                                    type={FIELD_TYPE.date}
+                                    placeholder="Start"
+                                  />
+                                ) : (
+                                  <FormInput
+                                    fieldName={[name, "date"]}
+                                    type={FIELD_TYPE.dateRange}
+                                    placeholder={["Start", "End"]}
+                                  />
+                                );
+                              }}
+                            </Form.Item>
+                          </Col>
+
+                          <Col span={12}>
+                            <FormInput
+                              fieldName={[name, "designation"]}
+                              type={FIELD_TYPE.text}
+                              placeholder="Role / Title"
+                            />
+                          </Col>
+                          <Col span={12}>
+                            <FormInput
+                              fieldName={[name, "location"]}
+                              type={FIELD_TYPE.text}
+                              placeholder="City, Country"
+                            />
+                          </Col>
+                          <Col span={24}>
+                            <FormInput
+                              fieldName={[name, "description"]}
+                              type={FIELD_TYPE.textArea}
+                              placeholder="Summary of responsibilities/impact"
+                            />
+                          </Col>
+
+                          <Col span={24}>
+                            <LabelComponent text="Highlights (bullets)" />
+                            <Form.List name={[name, "list"]}>
+                              {(f2, { add: add2, remove: remove2 }) => (
+                                <>
+                                  {f2.map(({ key: k2, name: n2 }) => (
+                                    <Row key={k2} gutter={8} className="mb-2">
+                                      <Col span={22}>
+                                        <FormInput
+                                          fieldName={[n2, "description"]}
+                                          type={FIELD_TYPE.text}
+                                          placeholder="Achievement / task"
+                                        />
+                                      </Col>
+                                      <Col span={2}>
+                                        <ButtonComponent
+                                          text="-"
+                                          btnCustomType="outline"
+                                          onClick={() => remove2(n2)}
+                                        />
+                                      </Col>
+                                    </Row>
+                                  ))}
+                                  <ButtonComponent
+                                    text="Add Highlight"
+                                    btnCustomType="inner-primary"
+                                    onClick={() => add2()}
+                                  />
+                                </>
+                              )}
+                            </Form.List>
+                          </Col>
+                        </Row>
+
+                        <div className="mt-2">
+                          <ButtonComponent
+                            text="Remove"
+                            btnCustomType="outline"
+                            onClick={() => remove(name)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                   <ButtonComponent
-                    text="Add Language"
+                    text="Add Work"
                     btnCustomType="inner-primary"
                     onClick={() => add()}
                   />
@@ -820,89 +1034,152 @@ export default function AddEditResume() {
               )}
             </Form.List>
 
-            {/* Work History */}
-            <Divider orientation="left">Work History</Divider>
-            <Form.List name="work_history">
+            {/* Education */}
+            <Divider orientation="left">Education</Divider>
+            <Form.List name="education">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name }, index) => {
+                    const isLast = index === fields.length - 1;
+
+                    return (
+                      <div
+                        key={key}
+                        className="mb-4 p-3 border rounded-md bg-gray-50">
+                        {/* Top bar with Current toggle only for LAST item */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="text-sm font-medium text-gray-600">
+                            Education #{index + 1}
+                          </div>
+                          {isLast && (
+                            <Form.Item
+                              name={[name, "is_current"]}
+                              valuePropName="checked"
+                              className="mb-0">
+                              <Switch
+                                size="small"
+                                checkedChildren="Current"
+                                unCheckedChildren="Past"
+                              />
+                            </Form.Item>
+                          )}
+                        </div>
+
+                        <Row gutter={12}>
+                          <Col span={12}>
+                            <FormInput
+                              fieldName={[name, "education_name"]}
+                              type={FIELD_TYPE.text}
+                              placeholder="Degree / Program"
+                            />
+                          </Col>
+
+                          {/* Date input: single when current, range when past */}
+                          <Col span={12}>
+                            <Form.Item
+                              noStyle
+                              shouldUpdate={(p, c) =>
+                                p.education?.[index]?.is_current !==
+                                c.education?.[index]?.is_current
+                              }>
+                              {({ getFieldValue }) => {
+                                const cur = !!getFieldValue([
+                                  "education",
+                                  index,
+                                  "is_current",
+                                ]);
+                                return cur ? (
+                                  <FormInput
+                                    fieldName={[name, "date"]}
+                                    type={FIELD_TYPE.date}
+                                    placeholder="Start"
+                                  />
+                                ) : (
+                                  <FormInput
+                                    fieldName={[name, "date"]}
+                                    type={FIELD_TYPE.dateRange}
+                                    placeholder={["Start", "End"]}
+                                  />
+                                );
+                              }}
+                            </Form.Item>
+                          </Col>
+
+                          <Col span={24}>
+                            <FormInput
+                              fieldName={[name, "education_info"]}
+                              type={FIELD_TYPE.textArea}
+                              placeholder="Details, institute, GPA, etc."
+                            />
+                          </Col>
+                        </Row>
+
+                        <div className="mt-2">
+                          <ButtonComponent
+                            text="Remove"
+                            btnCustomType="outline"
+                            onClick={() => remove(name)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <ButtonComponent
+                    text="Add Education"
+                    btnCustomType="inner-primary"
+                    onClick={() => add()}
+                  />
+                </>
+              )}
+            </Form.List>
+
+            {/* Languages */}
+            <Divider orientation="left">Languages</Divider>
+            <Form.List name="languages">
               {(fields, { add, remove }) => (
                 <>
                   {fields.map(({ key, name }) => (
-                    <div
-                      key={key}
-                      className="mb-4 p-3 border rounded-md bg-gray-50">
-                      <Row gutter={12}>
-                        <Col span={12}>
-                          {/* form-only 'date' (range) */}
-                          <FormInput
-                            fieldName={[name, "date"]}
-                            type={FIELD_TYPE.dateRange}
-                          />
-                        </Col>
-                        <Col span={12}>
-                          <FormInput
-                            fieldName={[name, "designation"]}
-                            type={FIELD_TYPE.text}
-                            placeholder="Role / Title"
-                          />
-                        </Col>
-                        <Col span={12}>
-                          <FormInput
-                            fieldName={[name, "location"]}
-                            type={FIELD_TYPE.text}
-                            placeholder="City, Country"
-                          />
-                        </Col>
-                        <Col span={24}>
-                          <FormInput
-                            fieldName={[name, "description"]}
-                            type={FIELD_TYPE.textArea}
-                            placeholder="Summary of responsibilities/impact"
-                          />
-                        </Col>
-
-                        <Col span={24}>
-                          <LabelComponent text="Highlights (bullets)" />
-                          <Form.List name={[name, "list"]}>
-                            {(f2, { add: add2, remove: remove2 }) => (
-                              <>
-                                {f2.map(({ key: k2, name: n2 }) => (
-                                  <Row key={k2} gutter={8} className="mb-2">
-                                    <Col span={22}>
-                                      <FormInput
-                                        fieldName={[n2, "description"]}
-                                        type={FIELD_TYPE.text}
-                                        placeholder="Achievement / task"
-                                      />
-                                    </Col>
-                                    <Col span={2}>
-                                      <ButtonComponent
-                                        text="-"
-                                        btnCustomType="outline"
-                                        onClick={() => remove2(n2)}
-                                      />
-                                    </Col>
-                                  </Row>
-                                ))}
-                                <ButtonComponent
-                                  text="Add Highlight"
-                                  btnCustomType="inner-primary"
-                                  onClick={() => add2()}
-                                />
-                              </>
-                            )}
-                          </Form.List>
-                        </Col>
-                      </Row>
-                      <div className="mt-2">
+                    <Row key={key} gutter={12} className="mb-2">
+                      <Col span={10}>
+                        <FormInput
+                          fieldName={[name, "name"]}
+                          type={FIELD_TYPE.text}
+                          placeholder="Language"
+                        />
+                      </Col>
+                      <Col span={7}>
+                        <FormInput
+                          fieldName={[name, "level_name"]}
+                          type={FIELD_TYPE.text}
+                          placeholder="e.g. Fluent"
+                        />
+                      </Col>
+                      <Col span={5}>
+                        <FormInput
+                          fieldName={[name, "level"]}
+                          type={FIELD_TYPE.number}
+                          placeholder="0 - 100"
+                          rules={[
+                            {
+                              type: "number",
+                              min: 0,
+                              max: 100,
+                              message: "0-100 allowed",
+                            },
+                          ]}
+                        />
+                      </Col>
+                      <Col span={2}>
                         <ButtonComponent
-                          text="Remove"
+                          text="-"
                           btnCustomType="outline"
                           onClick={() => remove(name)}
                         />
-                      </div>
-                    </div>
+                      </Col>
+                    </Row>
                   ))}
                   <ButtonComponent
-                    text="Add Work"
+                    text="Add Language"
                     btnCustomType="inner-primary"
                     onClick={() => add()}
                   />
@@ -921,26 +1198,14 @@ export default function AddEditResume() {
               <ButtonComponent
                 text="Download PDF"
                 btnCustomType="outline"
-                onClick={async () => {
-                  const docBlob = await pdf(
-                    <ResumePDF data={previewData} />,
-                  ).toBlob();
-                  const url = URL.createObjectURL(docBlob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = "resume.pdf";
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                  URL.revokeObjectURL(url);
-                }}
+                onClick={handleDownloadPDF}
               />
             </div>
           </Form>
         </Col>
 
         {/* RIGHT: PDF PREVIEW */}
-        <Col span={12}>
+        <Col span={12} className="sticky top-0 h-full">
           <div className="border bg-white shadow-md rounded-md">
             <PDFViewer style={{ width: "100%", height: 900 }}>
               <ResumePDF data={previewData} />

@@ -231,6 +231,7 @@ export type ComponentSharedEducation = {
   education_name?: Maybe<Scalars['String']['output']>;
   end_date?: Maybe<Scalars['Date']['output']>;
   id: Scalars['ID']['output'];
+  is_current?: Maybe<Scalars['Boolean']['output']>;
   start_date?: Maybe<Scalars['Date']['output']>;
 };
 
@@ -239,6 +240,7 @@ export type ComponentSharedEducationFiltersInput = {
   education_info?: InputMaybe<StringFilterInput>;
   education_name?: InputMaybe<StringFilterInput>;
   end_date?: InputMaybe<DateFilterInput>;
+  is_current?: InputMaybe<BooleanFilterInput>;
   not?: InputMaybe<ComponentSharedEducationFiltersInput>;
   or?: InputMaybe<Array<InputMaybe<ComponentSharedEducationFiltersInput>>>;
   start_date?: InputMaybe<DateFilterInput>;
@@ -249,6 +251,7 @@ export type ComponentSharedEducationInput = {
   education_name?: InputMaybe<Scalars['String']['input']>;
   end_date?: InputMaybe<Scalars['Date']['input']>;
   id?: InputMaybe<Scalars['ID']['input']>;
+  is_current?: InputMaybe<Scalars['Boolean']['input']>;
   start_date?: InputMaybe<Scalars['Date']['input']>;
 };
 
@@ -425,6 +428,7 @@ export type ComponentSharedWorkHistory = {
   designation?: Maybe<Scalars['String']['output']>;
   end_date?: Maybe<Scalars['Date']['output']>;
   id: Scalars['ID']['output'];
+  is_current?: Maybe<Scalars['Boolean']['output']>;
   list?: Maybe<Array<Maybe<ComponentSharedList>>>;
   location?: Maybe<Scalars['String']['output']>;
   start_date?: Maybe<Scalars['Date']['output']>;
@@ -442,6 +446,7 @@ export type ComponentSharedWorkHistoryFiltersInput = {
   description?: InputMaybe<StringFilterInput>;
   designation?: InputMaybe<StringFilterInput>;
   end_date?: InputMaybe<DateFilterInput>;
+  is_current?: InputMaybe<BooleanFilterInput>;
   list?: InputMaybe<ComponentSharedListFiltersInput>;
   location?: InputMaybe<StringFilterInput>;
   not?: InputMaybe<ComponentSharedWorkHistoryFiltersInput>;
@@ -454,6 +459,7 @@ export type ComponentSharedWorkHistoryInput = {
   designation?: InputMaybe<Scalars['String']['input']>;
   end_date?: InputMaybe<Scalars['Date']['input']>;
   id?: InputMaybe<Scalars['ID']['input']>;
+  is_current?: InputMaybe<Scalars['Boolean']['input']>;
   list?: InputMaybe<Array<InputMaybe<ComponentSharedListInput>>>;
   location?: InputMaybe<Scalars['String']['input']>;
   start_date?: InputMaybe<Scalars['Date']['input']>;

@@ -1,4 +1,3 @@
-import { Container, ContainerProduct } from "@/app/client-types";
 import { REQUIRED_MSG, REQUIRED_MSG_NUMBER_FIELD } from "@/static/constants";
 import { IDefaultCardFileType, ISaveType } from "@/types/common";
 import { notification } from "antd";
@@ -367,16 +366,6 @@ export const findEmptyPaths = (obj: any, currentPath = ""): string[] => {
 
   return emptyPaths;
 };
-export function getBoxCount(
-  cp: ContainerProduct,
-  container: Container,
-): number {
-  // Prefer product-level fields first, fallback to container-level
-  const boxesRaw =
-    cp?.no_of_box ?? container?.total_no_of_boxes_in_container ?? 0;
-
-  return Number(boxesRaw) || 0;
-}
 
 export const escapeHtml = (unsafe?: string | number | null): string => {
   if (unsafe === null || unsafe === undefined) return "";
