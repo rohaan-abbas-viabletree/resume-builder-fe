@@ -239,10 +239,10 @@ const styles = StyleSheet.create({
 
   // Section framing
   section: {
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 4,
     borderTop: `1 solid ${COLOR_DIVIDER}`,
-    marginTop: 12,
+    marginTop: 10,
   },
   sectionTitle: {
     fontSize: 12.5,
@@ -275,8 +275,7 @@ const styles = StyleSheet.create({
   },
   bullet: {
     marginLeft: 10,
-    marginTop: 2,
-    fontSize: 10.2,
+    marginTop: 1,
     maxWidth: "92%",
     textAlign: "justify",
   },
@@ -284,10 +283,13 @@ const styles = StyleSheet.create({
   // Layout helpers
   rowItem: {
     flexDirection: "row",
-    marginBottom: 10,
+    marginBottom: 4,
   },
   colLeft: { width: "30%", paddingRight: 8 },
-  colRight: { width: "70%" },
+  colRight: {
+    width: "70%",
+    gap: 2, // new line
+  },
 
   // Bars (skills/language)
   barWrap: {
