@@ -165,6 +165,12 @@ type UiResume = {
     skill_level?: string;
     skill_name?: string;
   }>;
+
+  certificates?: Array<{
+    id?: string;
+    name?: string;
+    description?: string;
+  }>;
 };
 
 /* -------------------------- PDF Styles -------------------------- */
@@ -253,6 +259,9 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     lineHeight: 1.55,
     color: COLOR_TEXT,
+    maxWidth: "95%",
+    alignSelf: "flex-start",
+    textAlign: "justify",
   },
   label: {
     fontSize: 11,
@@ -268,6 +277,8 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     marginTop: 2,
     fontSize: 10.2,
+    maxWidth: "92%",
+    textAlign: "justify",
   },
 
   // Layout helpers
@@ -515,6 +526,21 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
             })}
           </Section>
         ) : null}
+        {/* Certificates */}
+        {data?.certificates?.length ? (
+          <Section title="Certificates">
+            {data.certificates.map((c, i) => (
+              <View key={i} style={{ marginBottom: 10 }}>
+                <Text style={styles.label}>{c?.name || "—"}</Text>
+                {c?.description ? (
+                  <Text style={styles.paragraph}>
+                    {stripHtml(c.description)}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </Section>
+        ) : null}
       </Page>
     </Document>
   );
@@ -556,6 +582,7 @@ export default function AddEditResume() {
         ...w,
         date: toRangeValue(w?.start_date, w?.end_date, (w as any)?.date),
       })),
+      certificates: ui.certificates,
     };
 
     form.setFieldsValue(uiForForm as any);
@@ -732,6 +759,12 @@ export default function AddEditResume() {
       })),
 
       work_history: workPayload,
+
+      certificates: values.certificates?.map((c: any) => ({
+        id: c?.id,
+        name: c?.name,
+        description: c?.description,
+      })),
     });
 
     if (resumeId) {
@@ -1225,6 +1258,56 @@ export default function AddEditResume() {
                   ))}
                   <ButtonComponent
                     text="Add Language"
+                    btnCustomType="inner-primary"
+                    onClick={() => add()}
+                  />
+                </>
+              )}
+            </Form.List>
+            {/* Certificates */}
+            <Divider orientation="left">Certificates</Divider>
+            <Form.List name="certificates">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name }) => (
+                    <div
+                      key={key}
+                      className="mb-4 p-3 border rounded-md bg-gray-50">
+                      <Row gutter={12}>
+                        <Col span={24}>
+                          <FormInput
+                            fieldName={[name, "name"]}
+                            type={FIELD_TYPE.text}
+                            placeholder="Certificate Name"
+                          />
+                        </Col>
+
+                        <Col span={24}>
+                          <FormInput
+                            fieldName={[name, "description"]}
+                            type={FIELD_TYPE.textArea}
+                            placeholder="Description"
+                          />
+                        </Col>
+                      </Row>
+
+                      <div className="mt-2">
+                        <ButtonComponent
+                          text="Remove"
+                          btnCustomType="outline"
+                          onClick={() =>
+                            confirmRemove(
+                              () => remove(name),
+                              "this certificate",
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  <ButtonComponent
+                    text="Add Certificate"
                     btnCustomType="inner-primary"
                     onClick={() => add()}
                   />
