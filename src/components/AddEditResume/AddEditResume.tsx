@@ -118,6 +118,7 @@ const serializeRangeToPair = (
 };
 
 /* -------------------------- UI Types -------------------------- */
+type PdfHeaderMode = "resume_ref_id" | "name" | "both";
 
 type UiResume = {
   documentId?: string;
@@ -125,7 +126,7 @@ type UiResume = {
   name?: string;
   designation?: string;
   introduction?: string;
-
+  pdf_header_mode?: PdfHeaderMode;
   education?: Array<{
     id?: string;
     education_name?: string;
@@ -345,12 +346,29 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
   const langs = data?.languages || [];
   const projects = data?.major_projects || [];
 
+  const mode = data?.pdf_header_mode ?? "both";
+
+  const name = (data?.name ?? "").trim();
+  const ref = (data?.resume_ref_id ?? "").trim();
+
+  let headerText = "";
+
+  if (mode === "name") {
+    headerText = name || ref; // fallback
+  } else if (mode === "resume_ref_id") {
+    headerText = ref || name; // fallback
+  } else {
+    // both
+    headerText = name && ref ? `${name} (${ref})` : name || ref;
+  }
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View>
-          <Text style={styles.ref_id}>{data?.resume_ref_id || ""}</Text>
+          <Text style={styles.ref_id}>{headerText}</Text>
+
           {data?.designation ? (
             <Text style={styles.designation}>{data.designation}</Text>
           ) : null}
@@ -576,6 +594,7 @@ export default function AddEditResume() {
 
     const uiForForm: UiResume = {
       ...ui,
+      pdf_header_mode: ui.pdf_header_mode ?? "resume_ref_id",
       education: ui.education?.map((e) => ({
         ...e,
         date: toRangeValue(e?.start_date, e?.end_date, (e as any)?.date),
@@ -808,9 +827,20 @@ export default function AddEditResume() {
           <Form
             form={form}
             layout="vertical"
+            initialValues={{ pdf_header_mode: "resume_ref_id" }}
             onValuesChange={onFormValuesChange}>
             <Divider orientation="left">Personal Details</Divider>
-
+            <LabelComponent text="PDF Header Display" required={false} />
+            <FormInput
+              fieldName="pdf_header_mode"
+              type={FIELD_TYPE.select}
+              placeholder="Select what shows in the PDF header"
+              selectOptions={[
+                { label: "Resume Reference ID", value: "resume_ref_id" },
+                { label: "Full Name", value: "name" },
+                { label: "Both", value: "both" },
+              ]}
+            />
             <LabelComponent text="Resume Reference ID" />
             <FormInput
               fieldName="resume_ref_id"
