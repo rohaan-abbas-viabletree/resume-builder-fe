@@ -316,15 +316,22 @@ const styles = StyleSheet.create({
 
   itemGap: { marginBottom: 8 },
 
-  // ✅ Expertise 3-column bullets
-  expertiseGrid: {
+  // ✅ Expertise 2 independent columns (newspaper-style)
+  expertiseColumns: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    marginTop: 2,
   },
-  expertiseCell: {
-    width: "33.333%",
-    flexDirection: "row",
+  expertiseCol: {
+    width: "50%",
+  },
+  expertiseColLeft: {
     paddingRight: 10,
+  },
+  expertiseColRight: {
+    paddingLeft: 10,
+  },
+  expertiseItem: {
+    flexDirection: "row",
     marginBottom: 6,
   },
   expertiseBullet: {
@@ -393,7 +400,7 @@ const WorkItem = ({ w }: { w: any }) => {
   const rangeText = fmtWorkRange(w?.start_date, w?.end_date, !!w?.is_current);
 
   return (
-    <View style={styles.rowItem} wrap={false} minPresenceAhead={140}>
+    <View style={styles.rowItem} minPresenceAhead={0}>
       <View style={styles.colLeft}>
         <Text style={styles.meta}>{rangeText}</Text>
       </View>
@@ -521,22 +528,47 @@ export const ResumePDF = ({ data }: { data: any }) => {
             })}
           </Section>
         ) : null}
-
         {/* Areas of Expertise */}
         {data?.areas_of_expertise?.length ? (
           <Section title="Areas of Expertise">
-            <View style={styles.expertiseGrid}>
-              {data.areas_of_expertise.map((a: any, i: number) => {
-                const text = stripHtml(a?.description || "").trim();
-                if (!text) return null;
-                return (
-                  <View key={i} style={styles.expertiseCell}>
-                    <Text style={styles.expertiseBullet}>•</Text>
-                    <Text style={styles.expertiseText}>{text}</Text>
+            {(() => {
+              const items = (data.areas_of_expertise || [])
+                .map((a: any) => stripHtml(a?.description || "").trim())
+                .filter(Boolean);
+
+              const mid = Math.ceil(items.length / 2); // if 10 => 5/5, if 11 => 6/5
+              const left = items.slice(0, mid);
+              const right = items.slice(mid);
+
+              const renderItem = (text: string, i: number) => (
+                <View key={i} style={styles.expertiseItem} wrap={false}>
+                  <Text style={styles.expertiseBullet}>•</Text>
+                  <Text style={styles.expertiseText}>{text}</Text>
+                </View>
+              );
+              console.log(
+                "TOTAL",
+                items.length,
+                "LEFT",
+                left.length,
+                "RIGHT",
+                right.length,
+              );
+
+              return (
+                <View style={styles.expertiseColumns}>
+                  {/* LEFT column must use left[] */}
+                  <View style={[styles.expertiseCol, styles.expertiseColRight]}>
+                    {right.map(renderItem)}
                   </View>
-                );
-              })}
-            </View>
+                  <View style={[styles.expertiseCol, styles.expertiseColLeft]}>
+                    {left.map(renderItem)}
+                  </View>
+
+                  {/* RIGHT column must use right[] */}
+                </View>
+              );
+            })()}
           </Section>
         ) : null}
 
@@ -556,11 +588,7 @@ export const ResumePDF = ({ data }: { data: any }) => {
               return (
                 <>
                   {/* ✅ Header + first item kept together */}
-                  <View
-                    style={styles.section}
-                    wrap={false}
-                    minPresenceAhead={260} // tweak 220–320
-                  >
+                  <View style={styles.section} minPresenceAhead={80}>
                     <Text style={styles.sectionTitle}>Work Experience</Text>
                     <WorkItem w={first} />
                   </View>
@@ -744,6 +772,15 @@ export default function AddEditResume() {
 
   // Debounced live preview
   const onFormValuesChange = (_changed: any, allValues: any) => {
+    console.log(
+      "mode:",
+      allValues.pdf_header_mode,
+      "name:",
+      allValues.name,
+      "ref:",
+      allValues.resume_ref_id,
+    );
+
     console.groupCollapsed("%c[onValuesChange] Triggered", "color:#8a2be2");
     const newData = normalizeNullsDeep(allValues) as UiResume;
 
@@ -961,6 +998,9 @@ export default function AddEditResume() {
               type={FIELD_TYPE.text}
               rules={[{ required: true }]}
             />
+
+            <LabelComponent text="Full Name" required={false} />
+            <FormInput fieldName="name" type={FIELD_TYPE.text} />
 
             <LabelComponent text="Designation" required={false} />
 
