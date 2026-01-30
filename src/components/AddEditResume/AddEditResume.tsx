@@ -389,6 +389,78 @@ const fmtWorkRange = (start: any, end: any, isCurrent?: boolean) => {
 };
 
 /* -------------------------- PDF Component -------------------------- */
+const WorkItem = ({ w }: { w: any }) => {
+  const rangeText = fmtWorkRange(w?.start_date, w?.end_date, !!w?.is_current);
+
+  return (
+    <View style={styles.rowItem} wrap={false} minPresenceAhead={140}>
+      <View style={styles.colLeft}>
+        <Text style={styles.meta}>{rangeText}</Text>
+      </View>
+
+      <View style={styles.colRight}>
+        <Text style={styles.label}>{w?.designation || "Designation"}</Text>
+
+        {w?.location ? <Text style={styles.meta}>{w.location}</Text> : null}
+
+        {w?.description ? (
+          <Text style={styles.paragraph}>{stripHtml(w.description)}</Text>
+        ) : null}
+
+        {Array.isArray(w?.list) &&
+          w.list.map((li: any, idx: number) =>
+            li?.description ? (
+              <Text key={idx} style={styles.bullet}>
+                • {stripHtml(li.description)}
+              </Text>
+            ) : null,
+          )}
+      </View>
+    </View>
+  );
+};
+const ProjectItem = ({ p }: { p: any }) => (
+  <View style={{ marginBottom: 10 }} wrap={false} minPresenceAhead={130}>
+    <Text style={styles.label}>{p?.name || "—"}</Text>
+
+    {p?.project_info ? (
+      <Text style={styles.paragraph}>{stripHtml(p.project_info)}</Text>
+    ) : null}
+
+    {p?.description ? (
+      <Text style={styles.paragraph}>{stripHtml(p.description)}</Text>
+    ) : null}
+
+    {p?.project_list?.length ? (
+      <View style={{ marginTop: 2 }}>
+        {p.project_list.map((li: any, idx: number) =>
+          li?.description ? (
+            <Text key={idx} style={styles.bullet}>
+              • {stripHtml(li.description)}
+            </Text>
+          ) : null,
+        )}
+      </View>
+    ) : null}
+  </View>
+);
+const EducationItem = ({ e }: { e: any }) => (
+  <View style={styles.rowItem} wrap={false} minPresenceAhead={120}>
+    <View style={styles.colLeft}>
+      <Text style={styles.meta}>
+        {yearRange(e?.start_date, e?.end_date, e?.is_current)}
+      </Text>
+    </View>
+
+    <View style={styles.colRight}>
+      <Text style={styles.label}>{e?.education_name || "—"}</Text>
+
+      {e?.education_info ? (
+        <Text style={styles.paragraph}>{stripHtml(e.education_info)}</Text>
+      ) : null}
+    </View>
+  </View>
+);
 
 export const ResumePDF = ({ data }: { data: any }) => {
   const skills = data?.skills || [];
@@ -469,119 +541,88 @@ export const ResumePDF = ({ data }: { data: any }) => {
         ) : null}
 
         {/* Work Experience */}
-        {work.length ? (
-          <Section
-            title="Work Experience"
-            minPresenceAhead={MIN_REMAINING_BEFORE_NEXT_SECTION + 120}>
-            {[...work]
-              .sort((a: any, b: any) => {
+        {work.length
+          ? (() => {
+              const sortedWork = [...work].sort((a: any, b: any) => {
                 const aEnd = a?.is_current ? Date.now() : toTime(a?.end_date);
                 const bEnd = b?.is_current ? Date.now() : toTime(b?.end_date);
                 if (aEnd !== bEnd) return bEnd - aEnd;
                 return toTime(b?.start_date) - toTime(a?.start_date);
-              })
-              .map((w: any, i: number) => {
-                const rangeText = fmtWorkRange(
-                  w?.start_date,
-                  w?.end_date,
-                  !!w?.is_current,
-                );
+              });
 
-                return (
-                  <View key={i} style={styles.rowItem}>
-                    <View style={styles.colLeft}>
-                      <Text style={styles.meta}>{rangeText}</Text>
-                    </View>
+              const first = sortedWork[0];
+              const rest = sortedWork.slice(1);
 
-                    <View style={styles.colRight}>
-                      <Text style={styles.label}>
-                        {w?.designation || "Designation"}
-                      </Text>
-
-                      {w?.location ? (
-                        <Text style={styles.meta}>{w.location}</Text>
-                      ) : null}
-
-                      {w?.description ? (
-                        <Text style={styles.paragraph}>
-                          {stripHtml(w.description)}
-                        </Text>
-                      ) : null}
-
-                      {Array.isArray(w?.list) &&
-                        w.list.map((li: any, idx: number) =>
-                          li?.description ? (
-                            <Text key={idx} style={styles.bullet}>
-                              • {stripHtml(li.description)}
-                            </Text>
-                          ) : null,
-                        )}
-                    </View>
+              return (
+                <>
+                  {/* ✅ Header + first item kept together */}
+                  <View
+                    style={styles.section}
+                    wrap={false}
+                    minPresenceAhead={260} // tweak 220–320
+                  >
+                    <Text style={styles.sectionTitle}>Work Experience</Text>
+                    <WorkItem w={first} />
                   </View>
-                );
-              })}
-          </Section>
-        ) : null}
+
+                  {/* Remaining items continue normally */}
+                  {rest.map((w: any, i: number) => (
+                    <WorkItem key={i} w={w} />
+                  ))}
+                </>
+              );
+            })()
+          : null}
 
         {/* Major Projects */}
-        {projects.length ? (
-          <Section
-            title="Major Projects"
-            minPresenceAhead={MIN_REMAINING_BEFORE_NEXT_SECTION + 120}>
-            {projects.map((p: any, i: number) => (
-              <View key={i} style={{ marginBottom: 10 }}>
-                <Text style={styles.label}>{p?.name || "—"}</Text>
+        {projects.length
+          ? (() => {
+              const first = projects[0];
+              const rest = projects.slice(1);
 
-                {p?.project_info ? (
-                  <Text style={styles.paragraph}>
-                    {stripHtml(p.project_info)}
-                  </Text>
-                ) : null}
-
-                {p?.description ? (
-                  <Text style={styles.paragraph}>
-                    {stripHtml(p.description)}
-                  </Text>
-                ) : null}
-
-                {p?.project_list?.length ? (
-                  <View style={{ marginTop: 2 }}>
-                    {p.project_list.map((li: any, idx: number) =>
-                      li?.description ? (
-                        <Text key={idx} style={styles.bullet}>
-                          • {stripHtml(li.description)}
-                        </Text>
-                      ) : null,
-                    )}
+              return (
+                <>
+                  <View
+                    style={styles.section}
+                    wrap={false}
+                    minPresenceAhead={200}>
+                    <Text style={styles.sectionTitle}>Major Projects</Text>
+                    <ProjectItem p={first} />
                   </View>
-                ) : null}
-              </View>
-            ))}
-          </Section>
-        ) : null}
 
-        {/* Education */}
-        {edu.length ? (
-          <Section title="Education">
-            {[...edu].sort(eduSortDesc).map((e: any, i: number) => (
-              <View key={i} style={styles.rowItem}>
-                <View style={styles.colLeft}>
-                  <Text style={styles.meta}>
-                    {yearRange(e?.start_date, e?.end_date, e?.is_current)}
-                  </Text>
-                </View>
-                <View style={styles.colRight}>
-                  <Text style={styles.label}>{e?.education_name || "—"}</Text>
-                  {e?.education_info ? (
-                    <Text style={styles.paragraph}>
-                      {stripHtml(e.education_info)}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-          </Section>
-        ) : null}
+                  {rest.map((p: any, i: number) => (
+                    <ProjectItem key={i} p={p} />
+                  ))}
+                </>
+              );
+            })()
+          : null}
+
+        {edu.length
+          ? (() => {
+              const sortedEdu = [...edu].sort(eduSortDesc);
+              const first = sortedEdu[0];
+              const rest = sortedEdu.slice(1);
+
+              return (
+                <>
+                  {/* ✅ keep heading + first education together */}
+                  <View
+                    style={styles.section}
+                    wrap={false}
+                    minPresenceAhead={240}>
+                    <Text style={styles.sectionTitle}>Education</Text>
+                    <EducationItem e={first} />
+                  </View>
+
+                  {/* remaining education items */}
+                  {rest.map((e: any, i: number) => (
+                    <EducationItem key={i} e={e} />
+                  ))}
+                </>
+              );
+            })()
+          : null}
 
         {/* Languages */}
         {langs.length ? (
