@@ -386,7 +386,7 @@ const confirmRemove = (onOk: () => void, what: string) => {
 };
 const fmtWorkRange = (start: any, end: any, isCurrent?: boolean) => {
   if (isCurrent) {
-    const s = (fmtDate(start, "MMMM YYYY") || "").trim();
+    const s = (fmtDate(start, "MMM YYYY") || "").trim();
     return s ? `${s} - Present` : "Present";
   }
   const s = (fmtDate(start, "MMM YYYY") || "").toUpperCase();
