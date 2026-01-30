@@ -346,10 +346,6 @@ const styles = StyleSheet.create({
  * That enforces “need 30% free BEFORE starting next section”.
  */
 
-const SectionEndGuard = ({ min = MIN_REMAINING_BEFORE_NEXT_SECTION }) => (
-  // height: 1 so it actually participates in layout
-  <View wrap={false} minPresenceAhead={min} style={{ height: 1 }} />
-);
 const Section = ({
   title,
   children,
