@@ -25,6 +25,7 @@ import {
   pdf,
   Font,
 } from "@react-pdf/renderer";
+import RichTextEditor from "@/components/RichTextEditor/RichTextEditor";
 
 // 👇 Load PDFViewer client-only to avoid SSR issues
 const PDFViewer = dynamic(
@@ -172,6 +173,11 @@ type UiResume = {
     name?: string;
     description?: string;
   }>;
+
+  areas_of_expertise?: Array<{
+    id?: string;
+    description?: string;
+  }>;
 };
 
 /* -------------------------- PDF Styles -------------------------- */
@@ -207,12 +213,20 @@ const yearRange = (start?: any, end?: any, isCurrent?: boolean): string => {
 // Helvetica/Helvetica-Bold render well in @react-pdf
 Font.registerHyphenationCallback((word) => [word]); // avoid weird hyphenation
 
-const COLOR_TEXT = "#0f172a"; // slate-900
-const COLOR_MUTED = "#6b7280"; // gray-500
-const COLOR_DIVIDER = "#e5e7eb"; // gray-200
-const COLOR_ACCENT = "#1f2a44"; // deep slate
+const A4_HEIGHT = 841.89;
+const PAGE_PADDING_TOP = 36;
+const PAGE_PADDING_BOTTOM = 36;
+const CONTENT_HEIGHT = A4_HEIGHT - PAGE_PADDING_TOP - PAGE_PADDING_BOTTOM;
+export const MIN_REMAINING_BEFORE_NEXT_SECTION = Math.round(
+  CONTENT_HEIGHT * 0.3,
+);
+
+const COLOR_TEXT = "#0f172a";
+const COLOR_MUTED = "#6b7280";
+const COLOR_DIVIDER = "#e5e7eb";
+const COLOR_ACCENT = "#1f2a44";
 const COLOR_BAR_BG = "#e5e7eb";
-const COLOR_BAR_FG = "#1e293b"; // slate-800
+const COLOR_BAR_FG = "#1e293b";
 
 const styles = StyleSheet.create({
   page: {
@@ -254,15 +268,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  // Text styles
+  // Text styles (✅ removed justify -> fixes weird word gaps)
   paragraph: {
     marginTop: 2,
     fontSize: 10.5,
     lineHeight: 1.55,
     color: COLOR_TEXT,
-    maxWidth: "95%",
-    alignSelf: "flex-start",
-    textAlign: "justify",
+    textAlign: "left",
   },
   label: {
     fontSize: 11,
@@ -276,23 +288,19 @@ const styles = StyleSheet.create({
   },
   bullet: {
     marginLeft: 10,
-    marginTop: 1,
-    maxWidth: "92%",
-    textAlign: "justify",
+    marginTop: 2,
+    textAlign: "left",
   },
 
-  // Layout helpers
+  // Layout
   rowItem: {
     flexDirection: "row",
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  colLeft: { width: "30%", paddingRight: 8 },
-  colRight: {
-    width: "70%",
-    gap: 2, // new line
-  },
+  colLeft: { width: "28%", paddingRight: 10 },
+  colRight: { width: "72%" },
 
-  // Bars (skills/language)
+  // Bars
   barWrap: {
     marginTop: 3,
     width: "100%",
@@ -306,25 +314,62 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
 
-  // Minor spacers
-  itemGap: { marginBottom: 6 },
+  itemGap: { marginBottom: 8 },
+
+  // ✅ Expertise 3-column bullets
+  expertiseGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  expertiseCell: {
+    width: "33.333%",
+    flexDirection: "row",
+    paddingRight: 10,
+    marginBottom: 6,
+  },
+  expertiseBullet: {
+    width: 10,
+    fontSize: 10.5,
+    lineHeight: 1.45,
+  },
+  expertiseText: {
+    flex: 1,
+    fontSize: 10.5,
+    lineHeight: 1.45,
+  },
 });
 
-/* -------------------------- Helper: Section -------------------------- */
+/**
+ * ✅ Key fix:
+ * DO NOT put minPresenceAhead on the whole section container.
+ * Put it ONLY on the section title wrapper (start of section).
+ * That enforces “need 30% free BEFORE starting next section”.
+ */
 
+const SectionEndGuard = ({ min = MIN_REMAINING_BEFORE_NEXT_SECTION }) => (
+  // height: 1 so it actually participates in layout
+  <View wrap={false} minPresenceAhead={min} style={{ height: 1 }} />
+);
 const Section = ({
   title,
   children,
+  minPresenceAhead = MIN_REMAINING_BEFORE_NEXT_SECTION,
 }: {
   title?: string;
   children?: React.ReactNode;
+  minPresenceAhead?: number;
 }) => (
   <View style={styles.section}>
-    {title ? <Text style={styles.sectionTitle}>{title}</Text> : null}
+    {title ? (
+      // ✅ key: apply minPresenceAhead to Text
+      <Text style={styles.sectionTitle} minPresenceAhead={minPresenceAhead}>
+        {title}
+      </Text>
+    ) : null}
+
     {children}
   </View>
 );
-
 /* -------------------------- Remove Confirmation -------------------------- */
 
 const confirmRemove = (onOk: () => void, what: string) => {
@@ -336,10 +381,20 @@ const confirmRemove = (onOk: () => void, what: string) => {
     onOk,
   });
 };
+const fmtWorkRange = (start: any, end: any, isCurrent?: boolean) => {
+  if (isCurrent) {
+    const s = (fmtDate(start, "MMMM YYYY") || "").trim();
+    return s ? `${s} - Present` : "Present";
+  }
+  const s = (fmtDate(start, "MMM YYYY") || "").toUpperCase();
+  const e = (fmtDate(end, "MMM YYYY") || "").toUpperCase();
+  if (s && e) return `${s} - ${e}`;
+  return s || e || "";
+};
 
 /* -------------------------- PDF Component -------------------------- */
 
-const ResumePDF = ({ data }: { data: UiResume }) => {
+export const ResumePDF = ({ data }: { data: any }) => {
   const skills = data?.skills || [];
   const work = data?.work_history || [];
   const edu = data?.education || [];
@@ -347,20 +402,13 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
   const projects = data?.major_projects || [];
 
   const mode = data?.pdf_header_mode ?? "both";
-
   const name = (data?.name ?? "").trim();
   const ref = (data?.resume_ref_id ?? "").trim();
 
   let headerText = "";
-
-  if (mode === "name") {
-    headerText = name || ref; // fallback
-  } else if (mode === "resume_ref_id") {
-    headerText = ref || name; // fallback
-  } else {
-    // both
-    headerText = name && ref ? `${name} (${ref})` : name || ref;
-  }
+  if (mode === "name") headerText = name || ref;
+  else if (mode === "resume_ref_id") headerText = ref || name;
+  else headerText = name && ref ? `${name} (${ref})` : name || ref;
 
   return (
     <Document>
@@ -370,22 +418,23 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
           <Text style={styles.ref_id}>{headerText}</Text>
 
           {data?.designation ? (
-            <Text style={styles.designation}>{data.designation}</Text>
+            <Text style={styles.designation}>
+              {stripHtml(data.designation)}
+            </Text>
           ) : null}
         </View>
 
         {/* Introduction */}
         {data?.introduction ? (
-          <Section>
+          <Section title="Introduction">
             <Text style={styles.paragraph}>{stripHtml(data.introduction)}</Text>
           </Section>
         ) : null}
 
         {/* Skills */}
-        {skills.length > 0 ? (
+        {skills.length ? (
           <Section title="Skills">
-            {skills.map((s, i) => {
-              // 0–10 → %
+            {skills.map((s: any, i: number) => {
               const level10 = Math.min(
                 10,
                 Math.max(0, Number(s?.skill_level) || 0),
@@ -405,45 +454,66 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
           </Section>
         ) : null}
 
+        {/* Areas of Expertise */}
+        {data?.areas_of_expertise?.length ? (
+          <Section title="Areas of Expertise">
+            <View style={styles.expertiseGrid}>
+              {data.areas_of_expertise.map((a: any, i: number) => {
+                const text = stripHtml(a?.description || "").trim();
+                if (!text) return null;
+                return (
+                  <View key={i} style={styles.expertiseCell}>
+                    <Text style={styles.expertiseBullet}>•</Text>
+                    <Text style={styles.expertiseText}>{text}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Section>
+        ) : null}
+
         {/* Work Experience */}
-        {work.length > 0 ? (
-          <Section title="Work Experience">
+        {work.length ? (
+          <Section
+            title="Work Experience"
+            minPresenceAhead={MIN_REMAINING_BEFORE_NEXT_SECTION + 120}>
             {[...work]
-              .sort((a, b) => {
+              .sort((a: any, b: any) => {
                 const aEnd = a?.is_current ? Date.now() : toTime(a?.end_date);
                 const bEnd = b?.is_current ? Date.now() : toTime(b?.end_date);
                 if (aEnd !== bEnd) return bEnd - aEnd;
                 return toTime(b?.start_date) - toTime(a?.start_date);
               })
-              .map((w, i) => {
-                const start = fmtDate(w?.start_date, "YYYY-MM") || "";
-                const end = w?.is_current
-                  ? "Current"
-                  : fmtDate(w?.end_date, "YYYY-MM") || "";
+              .map((w: any, i: number) => {
+                const rangeText = fmtWorkRange(
+                  w?.start_date,
+                  w?.end_date,
+                  !!w?.is_current,
+                );
+
                 return (
                   <View key={i} style={styles.rowItem}>
-                    {/* LEFT: date range */}
                     <View style={styles.colLeft}>
-                      <Text style={styles.meta}>
-                        {start} {start && "–"} {end}
-                      </Text>
+                      <Text style={styles.meta}>{rangeText}</Text>
                     </View>
 
-                    {/* RIGHT: role details */}
                     <View style={styles.colRight}>
                       <Text style={styles.label}>
                         {w?.designation || "Designation"}
                       </Text>
+
                       {w?.location ? (
                         <Text style={styles.meta}>{w.location}</Text>
                       ) : null}
+
                       {w?.description ? (
                         <Text style={styles.paragraph}>
                           {stripHtml(w.description)}
                         </Text>
                       ) : null}
+
                       {Array.isArray(w?.list) &&
-                        w.list.map((li, idx) =>
+                        w.list.map((li: any, idx: number) =>
                           li?.description ? (
                             <Text key={idx} style={styles.bullet}>
                               • {stripHtml(li.description)}
@@ -458,24 +528,29 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
         ) : null}
 
         {/* Major Projects */}
-        {projects.length > 0 ? (
-          <Section title="Major Projects">
-            {projects.map((p, i) => (
+        {projects.length ? (
+          <Section
+            title="Major Projects"
+            minPresenceAhead={MIN_REMAINING_BEFORE_NEXT_SECTION + 120}>
+            {projects.map((p: any, i: number) => (
               <View key={i} style={{ marginBottom: 10 }}>
                 <Text style={styles.label}>{p?.name || "—"}</Text>
+
                 {p?.project_info ? (
                   <Text style={styles.paragraph}>
                     {stripHtml(p.project_info)}
                   </Text>
                 ) : null}
+
                 {p?.description ? (
                   <Text style={styles.paragraph}>
                     {stripHtml(p.description)}
                   </Text>
                 ) : null}
+
                 {p?.project_list?.length ? (
                   <View style={{ marginTop: 2 }}>
-                    {p.project_list!.map((li, idx) =>
+                    {p.project_list.map((li: any, idx: number) =>
                       li?.description ? (
                         <Text key={idx} style={styles.bullet}>
                           • {stripHtml(li.description)}
@@ -490,18 +565,15 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
         ) : null}
 
         {/* Education */}
-        {edu.length > 0 ? (
+        {edu.length ? (
           <Section title="Education">
-            {[...edu].sort(eduSortDesc).map((e, i) => (
+            {[...edu].sort(eduSortDesc).map((e: any, i: number) => (
               <View key={i} style={styles.rowItem}>
-                {/* LEFT: years */}
                 <View style={styles.colLeft}>
                   <Text style={styles.meta}>
                     {yearRange(e?.start_date, e?.end_date, e?.is_current)}
                   </Text>
                 </View>
-
-                {/* RIGHT: details */}
                 <View style={styles.colRight}>
                   <Text style={styles.label}>{e?.education_name || "—"}</Text>
                   {e?.education_info ? (
@@ -516,10 +588,9 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
         ) : null}
 
         {/* Languages */}
-        {langs.length > 0 ? (
+        {langs.length ? (
           <Section title="Languages">
-            {langs.map((l, i) => {
-              // 0–10 → %
+            {langs.map((l: any, i: number) => {
               const level10 = Math.min(10, Math.max(0, Number(l?.level) || 0));
               const levelPct = (level10 / 10) * 100;
               const levelText = l?.level_name || "";
@@ -546,10 +617,11 @@ const ResumePDF = ({ data }: { data: UiResume }) => {
             })}
           </Section>
         ) : null}
+
         {/* Certificates */}
         {data?.certificates?.length ? (
           <Section title="Certificates">
-            {data.certificates.map((c, i) => (
+            {data.certificates.map((c: any, i: number) => (
               <View key={i} style={{ marginBottom: 10 }}>
                 <Text style={styles.label}>{c?.name || "—"}</Text>
                 {c?.description ? (
@@ -604,6 +676,7 @@ export default function AddEditResume() {
         date: toRangeValue(w?.start_date, w?.end_date, (w as any)?.date),
       })),
       certificates: ui.certificates,
+      areas_of_expertise: ui.areas_of_expertise,
     };
 
     form.setFieldsValue(uiForForm as any);
@@ -786,6 +859,10 @@ export default function AddEditResume() {
         name: c?.name,
         description: c?.description,
       })),
+      areas_of_expertise: values.areas_of_expertise?.map((a: any) => ({
+        id: a?.id,
+        description: a?.description,
+      })),
     });
 
     if (resumeId) {
@@ -848,15 +925,24 @@ export default function AddEditResume() {
               rules={[{ required: true }]}
             />
 
-            <LabelComponent text="Full Name" required={false} />
-            <FormInput fieldName="name" type={FIELD_TYPE.text} />
-
             <LabelComponent text="Designation" required={false} />
-            <FormInput fieldName="designation" type={FIELD_TYPE.text} />
+
+            <Form.Item
+              name="designation"
+              // tell AntD to bind via "value" and "onChange"
+              valuePropName="value"
+              trigger="onChange">
+              <RichTextEditor placeholder="Write designation (Enter for new line)" />
+            </Form.Item>
 
             <LabelComponent text="Introduction" required={false} />
-            <FormInput fieldName="introduction" type={FIELD_TYPE.textArea} />
-
+            <Form.Item
+              name="introduction"
+              // tell AntD to bind via "value" and "onChange"
+              valuePropName="value"
+              trigger="onChange">
+              <RichTextEditor placeholder="Write introduction (Enter for new line)" />
+            </Form.Item>
             {/* Skills */}
             <Divider orientation="left">Skills</Divider>
             <Form.List name="skills">
@@ -899,6 +985,39 @@ export default function AddEditResume() {
                   ))}
                   <ButtonComponent
                     text="Add Skill"
+                    btnCustomType="inner-primary"
+                    onClick={() => add()}
+                  />
+                </>
+              )}
+            </Form.List>
+            {/* Areas of Expertise */}
+            <Divider orientation="left">Areas of Expertise</Divider>
+            <Form.List name="areas_of_expertise">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name }) => (
+                    <Row key={key} gutter={12} className="mb-2">
+                      <Col span={22}>
+                        <FormInput
+                          fieldName={[name, "description"]}
+                          type={FIELD_TYPE.text}
+                          placeholder="e.g. Odoo Implementation, React, API Design"
+                        />
+                      </Col>
+                      <Col span={2}>
+                        <ButtonComponent
+                          text="-"
+                          btnCustomType="outline"
+                          onClick={() =>
+                            confirmRemove(() => remove(name), "this expertise")
+                          }
+                        />
+                      </Col>
+                    </Row>
+                  ))}
+                  <ButtonComponent
+                    text="Add Expertise"
                     btnCustomType="inner-primary"
                     onClick={() => add()}
                   />
@@ -985,11 +1104,13 @@ export default function AddEditResume() {
                             />
                           </Col>
                           <Col span={24}>
-                            <FormInput
-                              fieldName={[name, "description"]}
-                              type={FIELD_TYPE.textArea}
-                              placeholder="Summary of responsibilities/impact"
-                            />
+                            <Form.Item
+                              name={[name, "description"]} // ✅ IMPORTANT: bind to this row
+                              valuePropName="value"
+                              trigger="onChange"
+                              className="mb-0">
+                              <RichTextEditor placeholder="Summary of responsibilities/impact" />
+                            </Form.Item>
                           </Col>
 
                           <Col span={24}>
@@ -1073,11 +1194,13 @@ export default function AddEditResume() {
                           />
                         </Col>
                         <Col span={24}>
-                          <FormInput
-                            fieldName={[name, "description"]}
-                            type={FIELD_TYPE.textArea}
-                            placeholder="Detailed description"
-                          />
+                          <Form.Item
+                            name={[name, "description"]} // ✅ IMPORTANT: bind to this row
+                            valuePropName="value"
+                            trigger="onChange"
+                            className="mb-0">
+                            <RichTextEditor placeholder="Summary of responsibilities/impact" />
+                          </Form.Item>
                         </Col>
                         <Col span={24}>
                           <LabelComponent text="Bulleted List" />
@@ -1209,11 +1332,13 @@ export default function AddEditResume() {
                           </Col>
 
                           <Col span={24}>
-                            <FormInput
-                              fieldName={[name, "education_info"]}
-                              type={FIELD_TYPE.textArea}
-                              placeholder="Details, institute, GPA, etc."
-                            />
+                            <Form.Item
+                              name={[name, "education_info"]} // ✅ IMPORTANT: bind to this row
+                              valuePropName="value"
+                              trigger="onChange"
+                              className="mb-0">
+                              <RichTextEditor placeholder="Details, institute, GPA, etc." />
+                            </Form.Item>
                           </Col>
                         </Row>
 
@@ -1315,11 +1440,13 @@ export default function AddEditResume() {
                         </Col>
 
                         <Col span={24}>
-                          <FormInput
-                            fieldName={[name, "description"]}
-                            type={FIELD_TYPE.textArea}
-                            placeholder="Description"
-                          />
+                          <Form.Item
+                            name={[name, "description"]} // ✅ IMPORTANT: bind to this row
+                            valuePropName="value"
+                            trigger="onChange"
+                            className="mb-0">
+                            <RichTextEditor placeholder="description" />
+                          </Form.Item>
                         </Col>
                       </Row>
 

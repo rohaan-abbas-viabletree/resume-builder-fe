@@ -225,6 +225,24 @@ export type CategoryInput = {
   slug?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type ComponentSharedAreasOfExpertise = {
+  __typename?: 'ComponentSharedAreasOfExpertise';
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+};
+
+export type ComponentSharedAreasOfExpertiseFiltersInput = {
+  and?: InputMaybe<Array<InputMaybe<ComponentSharedAreasOfExpertiseFiltersInput>>>;
+  description?: InputMaybe<StringFilterInput>;
+  not?: InputMaybe<ComponentSharedAreasOfExpertiseFiltersInput>;
+  or?: InputMaybe<Array<InputMaybe<ComponentSharedAreasOfExpertiseFiltersInput>>>;
+};
+
+export type ComponentSharedAreasOfExpertiseInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  id?: InputMaybe<Scalars['ID']['input']>;
+};
+
 export type ComponentSharedCertificates = {
   __typename?: 'ComponentSharedCertificates';
   description?: Maybe<Scalars['String']['output']>;
@@ -578,7 +596,7 @@ export type FloatFilterInput = {
   startsWith?: InputMaybe<Scalars['Float']['input']>;
 };
 
-export type GenericMorph = About | Article | Author | Category | ComponentSharedCertificates | ComponentSharedEducation | ComponentSharedLanguages | ComponentSharedList | ComponentSharedMajorProjects | ComponentSharedMedia | ComponentSharedProjectList | ComponentSharedQuote | ComponentSharedRichText | ComponentSharedSeo | ComponentSharedSkills | ComponentSharedSlider | ComponentSharedWorkHistory | Global | I18NLocale | Resume | ReviewWorkflowsWorkflow | ReviewWorkflowsWorkflowStage | UploadFile | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser;
+export type GenericMorph = About | Article | Author | Category | ComponentSharedAreasOfExpertise | ComponentSharedCertificates | ComponentSharedEducation | ComponentSharedLanguages | ComponentSharedList | ComponentSharedMajorProjects | ComponentSharedMedia | ComponentSharedProjectList | ComponentSharedQuote | ComponentSharedRichText | ComponentSharedSeo | ComponentSharedSkills | ComponentSharedSlider | ComponentSharedWorkHistory | Global | I18NLocale | Resume | ReviewWorkflowsWorkflow | ReviewWorkflowsWorkflowStage | UploadFile | UsersPermissionsPermission | UsersPermissionsRole | UsersPermissionsUser;
 
 export type Global = {
   __typename?: 'Global';
@@ -1240,6 +1258,7 @@ export type QueryUsersPermissionsUsers_ConnectionArgs = {
 
 export type Resume = {
   __typename?: 'Resume';
+  areas_of_expertise?: Maybe<Array<Maybe<ComponentSharedAreasOfExpertise>>>;
   certificates?: Maybe<Array<Maybe<ComponentSharedCertificates>>>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   designation?: Maybe<Scalars['String']['output']>;
@@ -1254,6 +1273,13 @@ export type Resume = {
   skills?: Maybe<Array<Maybe<ComponentSharedSkills>>>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   work_history?: Maybe<Array<Maybe<ComponentSharedWorkHistory>>>;
+};
+
+
+export type ResumeAreas_Of_ExpertiseArgs = {
+  filters?: InputMaybe<ComponentSharedAreasOfExpertiseFiltersInput>;
+  pagination?: InputMaybe<PaginationArg>;
+  sort?: InputMaybe<Array<InputMaybe<Scalars['String']['input']>>>;
 };
 
 
@@ -1306,6 +1332,7 @@ export type ResumeEntityResponseCollection = {
 
 export type ResumeFiltersInput = {
   and?: InputMaybe<Array<InputMaybe<ResumeFiltersInput>>>;
+  areas_of_expertise?: InputMaybe<ComponentSharedAreasOfExpertiseFiltersInput>;
   certificates?: InputMaybe<ComponentSharedCertificatesFiltersInput>;
   createdAt?: InputMaybe<DateTimeFilterInput>;
   designation?: InputMaybe<StringFilterInput>;
@@ -1325,6 +1352,7 @@ export type ResumeFiltersInput = {
 };
 
 export type ResumeInput = {
+  areas_of_expertise?: InputMaybe<Array<InputMaybe<ComponentSharedAreasOfExpertiseInput>>>;
   certificates?: InputMaybe<Array<InputMaybe<ComponentSharedCertificatesInput>>>;
   designation?: InputMaybe<Scalars['String']['input']>;
   education?: InputMaybe<Array<InputMaybe<ComponentSharedEducationInput>>>;

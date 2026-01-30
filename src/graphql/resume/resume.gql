@@ -29,7 +29,6 @@ query GetResumeById($documentId: ID!) {
     updatedAt
     resume_ref_id
     designation
-    designation
     education {
       start_date
       end_date
@@ -69,6 +68,9 @@ query GetResumeById($documentId: ID!) {
     }
     certificates {
       name
+      description
+    }
+    areas_of_expertise {
       description
     }
   }

@@ -30,6 +30,7 @@
     "react-dom": "^18",
     "react-phone-number-input": "^3.4.11",
     "react-query": "^3.39.3",
+    "react-quill": "^2.0.0",
     "react-spreadsheet": "^0.10.1",
     "scheduler": "^0.27.0",
     "socket.io-client": "^4.8.1",
